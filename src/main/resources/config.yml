@@ -1,0 +1,178 @@
+#   ┌──────────────────────────────────────────────────────────────┐
+#   │                 AETHELGUARD CONFIGURATION FILE               │
+#   ├──────────────────────────────────────────────────────────────┤
+#   │ * Most time values are in ticks. 20 ticks = 1 second.        │
+#   │ * Player messages support MiniMessage and legacy color codes.│
+#   │ * Restart the server after changing core auth/database logic.│
+#   └──────────────────────────────────────────────────────────────┘
+
+# ───────────────────── [ GENERAL SETTINGS ] ─────────────────────
+# Prefix added before player-facing plugin messages.
+# Legacy color codes are supported here, for example &c, &7, &l.
+prefix: "&c[ᴀᴇᴛʜᴇʟɢᴜᴀʀᴅ] &8» &7 "
+# Player message language. The plugin loads:
+# plugins/Aethelguard/messages/messages_<code>.yml
+# Examples: "TR" -> messages_tr.yml, "EN" -> messages_en.yml, "DE" -> messages_de.yml.
+# You can add custom languages by creating that file in the messages folder.
+default-language: "TR"
+# Console/plugin log language only. This does NOT load custom message files.
+# Supported values are only "en" and "tr"; any other value behaves like English.
+console-language: "en"
+
+# ───────────────────── [ DATABASE SETTINGS ] ────────────────────
+# MySQL account storage. If enabled is false, local YAML user files are used.
+database:
+  enabled: false
+  host: "localhost"
+  port: 3306
+  database: "aethelguard_db"
+  username: "root"
+  password: "password123"
+  # MySQL auth table name. Only letters, numbers and underscores are allowed.
+  table-name: "aethelguard_auth"
+  # JDBC options. Usually keep these defaults unless your database requires otherwise.
+  use-ssl: false
+  allow-public-key-retrieval: true
+  server-timezone: "UTC"
+  # HikariCP pool settings. Increase only if your server has many simultaneous auth requests.
+  pool:
+    maximum-size: 10
+    minimum-idle: 2
+    connection-timeout-ms: 10000
+    idle-timeout-ms: 600000
+    max-lifetime-ms: 1800000
+
+# ───────────────────── [ LOGGING SETTINGS ] ─────────────────────
+local-logging:
+  # Writes successful login/register records into plugins/Aethelguard/<folder>/<file-name>.txt
+  # This is separate from console logs and may include UUID/IP/password hash details.
+  enabled: true
+  folder: "internal"
+  file-name: "users"
+  separator: "--------------------------------------------------"
+console-logging:
+  # Hides vanilla connection/auth noise such as join/quit, UUID, lost connection,
+  # logged in with entity id, and issued server command lines.
+  suppress-server-connection-logs: true
+  # Logs only successful Aethelguard login/register events to console.
+  log-auth-success: true
+  # Logs when unauthenticated players try to chat.
+  log-blocked-chat-attempts: true
+
+# ───────────────────── [ STORAGE SETTINGS ] ─────────────────────
+storage:
+  # Used only when database.enabled is false.
+  # User files are stored under plugins/Aethelguard/<local-users-folder>/
+  local-users-folder: "users"
+
+# ───────────────────── [ AUTH CORE SETTINGS ] ───────────────────
+auth-settings:
+  # Sends unauthenticated players to the void-zone until they login/register.
+  # Their real location is remembered, but the void-zone is never saved as a restore location.
+  teleport-to-void: true
+  # Applies blindness while the player is not authenticated.
+  apply-blindness: true
+  # Clears only that player's chat after successful login/register, then sends the success message.
+  clear-chat-on-auth: true
+  # Logs denied commands used before authentication. Login/register commands are never logged.
+  log-unauthenticated-command-attempts: true
+
+  # ─────────────────── [ VOID ZONE SETTINGS ] ───────────────────
+  void-zone:
+    # Temporary auth location. High Y keeps unauthenticated players away from the world.
+    x: 0.0
+    y: 1000.0
+    z: 0.0
+    # true: use the player's current world. false: use the world name below.
+    use-player-world: true
+    # Used only when use-player-world is false. Example: "world"
+    world: ""
+
+  # ─────────────────── [ EFFECT SETTINGS ] ──────────────────────
+  effects:
+    # Blindness duration in ticks. A large value keeps it active until auth succeeds.
+    blindness-duration-ticks: 999999
+    # Potion amplifier: 0 = level I, 1 = level II.
+    blindness-amplifier: 1
+    # Locks the player's personal time while unauthenticated.
+    lock-player-time: true
+    # 18000 is midnight. Used only when lock-player-time is true.
+    locked-time: 18000
+
+  # ─────────────────── [ PROMPT SETTINGS ] ──────────────────────
+  prompts:
+    # Repeats login/register reminder messages until the player authenticates.
+    enabled: true
+    # Delay before the first reminder. 20 ticks = 1 second.
+    initial-delay-ticks: 20
+    # Delay between reminders. 100 ticks = 5 seconds.
+    interval-ticks: 100
+
+  # ─────────────────── [ TIMEOUT SETTINGS ] ─────────────────────
+  timeout:
+    # Enables auth timeout checks for unauthenticated players.
+    enabled: true
+    # Time before timeout triggers. 1200 ticks = 60 seconds.
+    ticks: 1200
+    # true: restore the player to a safe location, then kick.
+    # false: only logs timeout; the player stays online.
+    kick: true
+
+  # ─────────────────── [ RESTRICTION SETTINGS ] ─────────────────
+  restrictions:
+    # Locks position while unauthenticated, but still lets the player rotate camera.
+    prevent-movement: true
+    # Cancels damage, block break/place, and chat before auth.
+    prevent-damage: true
+    prevent-block-break: true
+    prevent-block-place: true
+    prevent-chat: true
+    # If true, players on login/register screen cannot see normal player chat.
+    hide-chat-from-unauthenticated: true
+
+  # ─────────────────── [ ALLOWED COMMAND SETTINGS ] ─────────────
+  commands:
+    # Commands allowed before authentication.
+    # Login/register and their aliases are handled silently so passwords do not appear in console.
+    allowed:
+      - "/login"
+      - "/giris"
+      - "/giriş"
+      - "/register"
+      - "/kayitol"
+      - "/kayıtol"
+
+  # ─────────────────── [ WRONG PASSWORD SETTINGS ] ──────────────
+  wrong-password:
+    # Failed /login attempts before punishment.
+    max-attempts: 3
+    # true: kick after max-attempts. false: show remaining attempts but never kick.
+    kick-enabled: true
+
+  # ─────────────────── [ SOUND SETTINGS ] ───────────────────────
+  sounds:
+    # Master switch for every auth sound below.
+    enabled: true
+    # Sound names use Minecraft namespaced keys, for example entity.player.levelup.
+    # repeat-times repeats the sound; repeat-interval-ticks controls delay between repeats.
+    register-success:
+      enabled: true
+      sound: "entity.ender_dragon.growl"
+      volume: 1.0
+      pitch: 1.0
+      repeat-times: 2
+      repeat-interval-ticks: 6
+    login-success:
+      enabled: true
+      sound: "entity.player.levelup"
+      volume: 1.0
+      pitch: 1.0
+      repeat-times: 2
+      repeat-interval-ticks: 6
+    wrong-password:
+      enabled: true
+      sound: "entity.item.break"
+      volume: 1.0
+      pitch: 1.0
+      repeat-times: 1
+      repeat-interval-ticks: 4

@@ -1,0 +1,38 @@
+#   ┌────────────────────────────────────────────────────────┐
+#   │                  AETHELGUARD LANGUAGE FILE             │
+#   ├────────────────────────────────────────────────────────┤
+#   │ * Supports MiniMessage tags and RGB colors.            │
+#   │ * {remaining} placeholder displays remaining attempts. │
+#   │ * Use \n where you want to create a new line.          │
+#   └────────────────────────────────────────────────────────┘
+
+messages:
+  # ─────────────── [ AUTH SCREEN SETTINGS ] ────────────────
+  welcome-message: "<aqua>Successfully connected. <green>Welcome back to the server!"
+  secure-void-zone: "<gray>[<dark_purple>🛡</dark_purple>] <light_purple>Security active: You are in a safe zone until you authenticate."
+  login-prompt: "<gray>Welcome! Please log in. <white>/login <password>"
+  register-prompt: "<gray>Welcome to the server! Please register. <white>/register <password> <password again>"
+  plugin-reloaded-auth: "<red><bold>SECURITY UPDATED!</bold> <gray>System has been reloaded, please re-authenticate."
+
+
+  # ─────────────── [ DENIAL MESSAGES ] ─────────────────────
+  chat-denied: "<red><bold>[!]</bold> <gray>Access denied! You must log in before speaking in chat."
+  command-denied: "<red><bold>[!]</bold> <gray>Access denied! You must log in before using commands."
+
+  # ─────────────── [ ERROR & USAGE MESSAGES ] ───────────────
+  only-players: "<red>This command can only be executed by in-game players!"
+  register-usage: "<red><bold>ERROR</bold> <dark_gray>» <gray>Invalid format! Correct usage: <yellow>/register <password> <confirm_password>"
+  login-usage: "<red><bold>ERROR</bold> <dark_gray>» <gray>Invalid format! Correct usage: <yellow>/login <password>"
+  passwords-dont-match: "<red><bold>ERROR</bold> <dark_gray>» <gray>The passwords you entered do not match! Please check again."
+  already-registered: "<red><bold>ERROR</bold> <dark_gray>» <gray>This account is already registered! Please use <yellow>/login<red>."
+  not-registered: "<red><bold>ERROR</bold> <dark_gray>» <gray>No account found with this username. Please <yellow>/register <red>first."
+  register-error: "<red><bold>CRITICAL ERROR</bold> <dark_gray>» <gray>A database error occurred during registration! Please notify staff."
+
+  # ─────────────── [ SUCCESS & PUNISHMENT ] ─────────────────
+  register-success: "<green><bold>SUCCESS!</bold> <white>Your account has been successfully created. Have fun!"
+  login-success: "<green><bold>SUCCESS!</bold> <white>Authentication successful. Enjoy your time!"
+  wrong-password: "<red><bold>WRONG PASSWORD!</bold> <gray>The password you entered is incorrect. Remaining Attempts: <yellow>{remaining}<gray>/3"
+
+  # ─────────────── [ KICK MESSAGES ] ────────────────────────
+  timeout-kick: "<gray>Time out! You were disconnected for failing to log in within 60 seconds."
+  wrong-password-kick: "<gray>Security lock! You were disconnected after 3 incorrect password attempts."

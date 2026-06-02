@@ -1,0 +1,16 @@
+name: Aethelguard
+version: '${version}'
+main: me.aethelster.aethelguard.Aethelguard
+api-version: '1.21'
+author: Aethelster
+description: Aethelguard 0.2-sentinel - temiz loglar ve güvenli auth akışı sunan gelişmiş auth sistemi.
+commands:
+  ayarlar:
+    description: Aethelguard hesap ve sistem ayarlarını değiştirmenizi sağlar.
+    permission: aethelguard.player
+  register:
+    description: Sunucuya kayıt olmanızı sağlar.
+    aliases: [kayitol, kayıtol]
+  login:
+    description: Hesabınıza giriş yapmanızı sağlar.
+    aliases: [giris, giriş]

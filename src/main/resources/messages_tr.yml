@@ -1,0 +1,38 @@
+#   ┌────────────────────────────────────────────────────────┐
+#   │                 AETHELGUARD  DİL DOSYASI               │
+#   ├────────────────────────────────────────────────────────┤
+#   │ * MiniMessage etiketlerini ve RGB renklerini destekler.│
+#   │ * {remaining} ifadesi kalan hatalı giriş hakkını basar.│
+#   │ * Satır atlamak istediğiniz yerlerde \n kullanın.      │
+#   └────────────────────────────────────────────────────────┘
+
+messages:
+  # ─────────────── [ GİRİŞ EKRANI AYARLARI ] ────────────────
+  welcome-message: "<aqua>Sunucuya başarıyla bağlandınız. <green>Yeniden hoş geldiniz!"
+  secure-void-zone: "<gray>[<dark_purple>🛡</dark_purple>] <light_purple>Güvenlik sistemi aktif: Kimliğinizi doğrulayana kadar güvenli bölgedesiniz."
+  login-prompt: "<gray>Hoşgeldiniz! Lütfen giriş yapın. <white>/login <şifre>"
+  register-prompt: "<gray>Sunucuya hoşgeldiniz! Lütfen kayıt olun. <white>/register <şifre> <şifre tekrar>"
+  plugin-reloaded-auth: "<red><bold>GÜVENLİK GÜNCELLENDİ!</bold> <gray>Sistem yenilendi, lütfen kimliğinizi tekrar doğrulayın."
+
+
+  # ─────────────── [ ENGELLEME MESAJLARI ] ─────────────────
+  chat-denied: "<red><bold>[!]</bold> <gray>Sohbete katılabilmek için önce giriş yapmalısınız."
+  command-denied: "<red><bold>[!]</bold> <gray>Erişim engellendi! Giriş yapmadan komut kullanamazsınız."
+
+  # ─────────────── [ HATA & KULLANIM MESAJLARI ] ─────────────
+  only-players: "<red>Bu komut sadece oyun içerisindeki oyuncular tarafından kullanılabilir!"
+  register-usage: "<red><bold>HATA</bold> <dark_gray>» <gray>Geçersiz kullanım! Doğru format: <yellow>/register <şifre> <şifre_tekrar>"
+  login-usage: "<red><bold>HATA</bold> <dark_gray>» <gray>Geçersiz kullanım! Doğru format: <yellow>/login <şifre>"
+  passwords-dont-match: "<red><bold>HATA</bold> <dark_gray>» <gray>Girdiğiniz şifreler birbiriyle uyuşmuyor! Lütfen kontrol edin."
+  already-registered: "<red><bold>HATA</bold> <dark_gray>» <gray>Bu hesap zaten kayıtlı! Lütfen <yellow>/login <red>komutunu kullanın."
+  not-registered: "<red><bold>HATA</bold> <dark_gray>» <gray>Kayıtlı bir hesap bulunamadı. Lütfen önce <yellow>/register <red>yapın."
+  register-error: "<red><bold>KRİTİK HATA</bold> <dark_gray>» <gray>Veritabanı kaydı esnasında bir hata oluştu! Lütfen yetkililere bildirin."
+
+  # ─────────────── [ BAŞARI & CEZA MESAJLARI ] ──────────────
+  register-success: "<green><bold>BAŞARILI!</bold> <white>Hesabınız başarıyla oluşturuldu. İyi oyunlar dileriz."
+  login-success: "<green><bold>BAŞARILI!</bold> <white>Kimlik doğrulaması tamamlandı. İyi oyunlar dileriz!"
+  wrong-password: "<red><bold>HATALI ŞİFRE!</bold> <gray>Girdiğiniz şifre yanlış. Kalan Deneme Hakkınız: <yellow>{remaining}<gray>/3"
+
+  # ─────────────── [ OYUNDAN ATMA (KICK) MESAJLARI ] ─────────
+  timeout-kick: "<gray>Süre doldu! 60 saniye içinde giriş yapmadığınız için sunucudan uzaklaştırıldınız."
+  wrong-password-kick: "<gray>Güvenlik engeli! 3 kez hatalı şifre girdiğiniz için sunucudan uzaklaştırıldınız."
