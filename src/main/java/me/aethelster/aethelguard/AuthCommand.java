@@ -67,6 +67,12 @@ public class AuthCommand implements CommandExecutor {
             return;
         }
 
+        Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[0], player.getName());
+        if (!passwordPolicy.valid()) {
+            plugin.sendMessage(player, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
+            return;
+        }
+
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             if (plugin.isAccountRegistered(player.getUniqueId())) {
                 plugin.getServer().getScheduler().runTask(plugin, () ->
@@ -160,6 +166,19 @@ public class AuthCommand implements CommandExecutor {
         boolean kickEnabled = plugin.getConfig().getBoolean("auth-settings.wrong-password.kick-enabled", true);
 
         if (kickEnabled && attempts >= maxAttempts) {
+            if (plugin.getConfig().getBoolean("recovery.enabled", true)
+                    && plugin.getConfig().getBoolean("recovery.offer-before-kick", true)) {
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    Aethelguard.SecurityQuestion question = plugin.getStoredSecurityQuestion(playerUUID);
+                    if (question != null) {
+                        plugin.sendMessage(player, "messages.recover-question-hint", true, Map.of("question", question.text()));
+                    }
+                    plugin.sendMessage(player, "messages.recover-before-kick", true);
+                });
+                plugin.getWrongPasswordAttempts().remove(playerUUID);
+                return;
+            }
+
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                     plugin.restorePreviousLocation(player);
                     plugin.restoreAuthInventory(player);
@@ -199,19 +218,6 @@ public class AuthCommand implements CommandExecutor {
         }
     }
 
-    private void logPlayerAction(Player player, String ipAddress, String hash) {
-        String lastLoginDate = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
-        String lang = plugin.getConfig().getString("console-language", "en");
-        String logData = (lang.equalsIgnoreCase("tr"))
-                ? String.format("[%s]\n   UUID: %s\n   IP: %s\n   Şifre Hash: %s\n   Son Giriş Tarihi: %s",
-                player.getName(), player.getUniqueId(), ipAddress, hash, lastLoginDate)
-                : String.format("[%s]\n   UUID: %s\n   IP: %s\n   Password Hash: %s\n   Last LogIn Date: %s",
-                player.getName(), player.getUniqueId(), ipAddress, hash, lastLoginDate);
-
-        String fileName = plugin.getConfig().getString("local-logging.file-name", "users");
-        plugin.writeToInternalLog(fileName, logData);
-    }
-
     private boolean registerPlayer(String uuid, String username, String hashedPassword, Player player, String ipAddress) {
         String now = currentDate();
         Location location = player.getLocation();
@@ -235,6 +241,12 @@ public class AuthCommand implements CommandExecutor {
             config.set("stats.login-count", 0);
             config.set("security.wrong-attempts-total", 0);
             config.set("security.last-wrong-attempt", null);
+            config.set("security-question.id", null);
+            config.set("security-question.text", null);
+            config.set("security-question.answer-hash", null);
+            config.set("security.cooldowns", null);
+            config.set("recovery.method", "question");
+            config.set("backup-codes.hashes", null);
             config.set("two-factor.enabled", false);
             config.set("two-factor.secret", null);
             try {

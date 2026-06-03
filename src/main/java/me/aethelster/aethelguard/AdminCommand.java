@@ -130,7 +130,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 clearOnlineState(status);
                 sendPlayerMessage(sender, "messages.admin-unregister-success", status.username());
                 plugin.logInfo(
-                        sender.getName() + " removed account " + status.username() + ".",
+                        sender.getName() + ", " + status.username() + " hesabını sildi.",
                         sender.getName() + " removed account " + status.username() + "."
                 );
             } else {
@@ -151,11 +151,17 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
+            Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[2], status.username());
+            if (!passwordPolicy.valid()) {
+                plugin.sendMessage(sender, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
+                return true;
+            }
+
             if (changePassword(status.username(), args[2])) {
                 plugin.getWrongPasswordAttempts().remove(status.uuid());
                 sendPlayerMessage(sender, "messages.admin-change-password-success", status.username());
                 plugin.logInfo(
-                        sender.getName() + " changed password for " + status.username() + ".",
+                        sender.getName() + ", " + status.username() + " hesabının şifresini değiştirdi.",
                         sender.getName() + " changed password for " + status.username() + "."
                 );
             } else {
@@ -186,7 +192,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
             if (plugin.getConfig().getBoolean("console-logging.log-auth-state-changes", true)) {
                 plugin.logInfo(
-                        sender.getName() + " forced " + target.getName() + " back to authentication.",
+                        sender.getName() + ", " + target.getName() + " oyuncusunu tekrar giriş ekranına gönderdi.",
                         sender.getName() + " forced " + target.getName() + " back to authentication."
                 );
             }

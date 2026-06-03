@@ -71,7 +71,13 @@ public class DatabaseManager {
                 "last_z DOUBLE DEFAULT NULL," +
                 "login_count INT DEFAULT 0," +
                 "wrong_attempts_total INT DEFAULT 0," +
-                "last_wrong_attempt VARCHAR(32) DEFAULT NULL" +
+                "last_wrong_attempt VARCHAR(32) DEFAULT NULL," +
+                "security_question_id VARCHAR(64) DEFAULT NULL," +
+                "security_question_text VARCHAR(255) DEFAULT NULL," +
+                "security_question_hash VARCHAR(255) DEFAULT NULL," +
+                "recovery_method VARCHAR(32) DEFAULT 'question'," +
+                "backup_code_hashes TEXT DEFAULT NULL," +
+                "security_cooldowns TEXT DEFAULT NULL" +
                 ");";
 
         try (Connection conn = getConnection()) {
@@ -100,6 +106,12 @@ public class DatabaseManager {
         addColumnIfMissing(stmt, table, "login_count INT DEFAULT 0");
         addColumnIfMissing(stmt, table, "wrong_attempts_total INT DEFAULT 0");
         addColumnIfMissing(stmt, table, "last_wrong_attempt VARCHAR(32) DEFAULT NULL");
+        addColumnIfMissing(stmt, table, "security_question_id VARCHAR(64) DEFAULT NULL");
+        addColumnIfMissing(stmt, table, "security_question_text VARCHAR(255) DEFAULT NULL");
+        addColumnIfMissing(stmt, table, "security_question_hash VARCHAR(255) DEFAULT NULL");
+        addColumnIfMissing(stmt, table, "recovery_method VARCHAR(32) DEFAULT 'question'");
+        addColumnIfMissing(stmt, table, "backup_code_hashes TEXT DEFAULT NULL");
+        addColumnIfMissing(stmt, table, "security_cooldowns TEXT DEFAULT NULL");
     }
 
     private void addColumnIfMissing(Statement stmt, String table, String columnSql) {

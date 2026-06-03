@@ -42,6 +42,12 @@ public class TwoFactorCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("setup")) {
+            long remaining = plugin.getSecurityCooldownRemainingMillis(player, "two-factor-setup");
+            if (remaining > 0L) {
+                plugin.sendMessage(player, "messages.security-cooldown-active", true,
+                        java.util.Map.of("time", plugin.formatDuration(remaining)));
+                return true;
+            }
             String secret = plugin.createPendingTwoFactorSetup(player);
             plugin.sendMessage(player, "messages.two-factor-setup-start", true,
                     java.util.Map.of("secret", secret));
@@ -58,6 +64,12 @@ public class TwoFactorCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("disable")) {
+            long remaining = plugin.getSecurityCooldownRemainingMillis(player, "two-factor-disable");
+            if (remaining > 0L) {
+                plugin.sendMessage(player, "messages.security-cooldown-active", true,
+                        java.util.Map.of("time", plugin.formatDuration(remaining)));
+                return true;
+            }
             if (args.length < 2) {
                 plugin.sendMessage(player, "messages.two-factor-disable-usage", true);
                 return true;

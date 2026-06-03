@@ -26,6 +26,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -34,6 +35,11 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.*;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.sql.PreparedStatement;
@@ -63,8 +69,14 @@ public final class Aethelguard extends JavaPlugin {
     private final Map<UUID, Long> captchaCooldowns = new HashMap<>();
     private final Set<UUID> pendingTwoFactorPlayers = new HashSet<>();
     private final Map<UUID, String> pendingTwoFactorSetups = new HashMap<>();
+    private final Map<UUID, SecurityQuestion> pendingSecurityQuestions = new HashMap<>();
     private final Map<UUID, AuthInventorySnapshot> authInventories = new HashMap<>();
     private final Map<UUID, BossBar> authBossBars = new HashMap<>();
+    private final Map<UUID, Boolean> extraCaptchaPlayers = new HashMap<>();
+    private final Map<String, Deque<Long>> ipSuccessLogins = new HashMap<>();
+    private final Map<String, VpnCheckResult> vpnCheckCache = new HashMap<>();
+    private final Set<String> pendingVpnChecks = new HashSet<>();
+    private final HttpClient vpnHttpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
     private final SecureRandom random = new SecureRandom();
     private static final Map<String, String> COLOR_MAP = Map.ofEntries(
             Map.entry("&0", "<black>"),
@@ -373,6 +385,7 @@ public final class Aethelguard extends JavaPlugin {
     public void completeLogin(Player player,  boolean sendMessage) {
         unauthenticatedPlayers.remove(player.getUniqueId());
         loggedInPlayers.add(player.getUniqueId());
+        recordAdaptiveSuccessfulAuth(player);
         clearCaptchaState(player.getUniqueId());
         clearTwoFactorState(player.getUniqueId());
         hideAuthBossBar(player);
@@ -491,6 +504,7 @@ public final class Aethelguard extends JavaPlugin {
         logInfo("Aethelguard çekirdek altyapısı kuruluyor...", "Initializing Aethelguard core infrastructure...");
 
         saveDefaultLangFiles();
+        saveDefaultSecurityQuestionFiles();
         reloadLangConfig();
         ensureStatusStorage();
 
@@ -519,6 +533,10 @@ public final class Aethelguard extends JavaPlugin {
         getCommand("changepassword").setExecutor(new PlayerPasswordCommand(this));
         getCommand("captcha").setExecutor(new CaptchaCommand(this));
         getCommand("twofactor").setExecutor(new TwoFactorCommand(this));
+        getCommand("securityquestion").setExecutor(new SecurityQuestionCommand(this));
+        getCommand("backupcodes").setExecutor(new BackupCodesCommand(this));
+        getCommand("recoverymethod").setExecutor(new RecoveryMethodCommand(this));
+        getCommand("recover").setExecutor(new RecoverCommand(this));
         getCommand("aethelguard").setExecutor(adminCommand);
         getCommand("aethelguard").setTabCompleter(adminCommand);
         getServer().getPluginManager().registerEvents(new AuthListener(this), this);
@@ -547,6 +565,7 @@ public final class Aethelguard extends JavaPlugin {
             reloadConfig();
             validateConfig();
             saveDefaultLangFiles();
+            saveDefaultSecurityQuestionFiles();
             reloadLangConfig();
             ensureStatusStorage();
             reconnectDatabase();
@@ -647,6 +666,52 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.registration.ip-limit.enabled", true),
                 Map.entry("auth-settings.registration.ip-limit.max-accounts", 2),
                 Map.entry("auth-settings.registration.ip-limit.bypass-permission", "aethelguard.bypass.iplimit"),
+                Map.entry("auth-settings.password-policy.enabled", true),
+                Map.entry("auth-settings.password-policy.min-length", 4),
+                Map.entry("auth-settings.password-policy.max-length", 64),
+                Map.entry("auth-settings.password-policy.require-letter", false),
+                Map.entry("auth-settings.password-policy.require-number", false),
+                Map.entry("auth-settings.password-policy.block-username", true),
+                Map.entry("auth-settings.password-policy.allow-turkish-characters", true),
+                Map.entry("auth-settings.password-policy.allow-punctuation", true),
+                Map.entry("auth-settings.password-policy.allow-non-alphabet-symbols", false),
+                Map.entry("auth-settings.password-policy.blocked-words", List.of("admin", "password", "sifre", "şifre", "123456", "qwerty", "fuck", "shit", "bitch", "asshole", "bastard", "dick", "pussy", "cunt", "orospu", "amk", "aq", "siktir", "sik", "pic", "piç", "yarrak", "göt", "got")),
+                Map.entry("adaptive-security.enabled", true),
+                Map.entry("adaptive-security.trusted-ip-captcha-bypass.enabled", true),
+                Map.entry("adaptive-security.trusted-ip-captcha-bypass.window-minutes", 30),
+                Map.entry("adaptive-security.trusted-ip-captcha-bypass.required-successful-logins", 3),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.enabled", true),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.manual-suspicious-ips", List.of()),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.reasons.max-accounts-per-ip", 3),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.reasons.max-current-wrong-attempts", 2),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.enabled", true),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.providers", List.of("IPWHOIS", "IPAPI")),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.min-detections", 1),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.timeout-ms", 2500),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.cache-minutes", 360),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.fail-open", true),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.check-private-ips", false),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.vpn-check.log-results", true),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.captcha-mode", "RANDOM_EXCEPT_NORMAL"),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.fixed-type", "MATH"),
+                Map.entry("adaptive-security.suspicious-ip-extra-captcha.types", List.of("TEXT", "NUMERIC", "ALPHANUMERIC", "MATH")),
+                Map.entry("recovery.enabled", true),
+                Map.entry("recovery.offer-before-kick", true),
+                Map.entry("recovery.security-questions.enabled", true),
+                Map.entry("recovery.backup-codes.enabled", true),
+                Map.entry("recovery.backup-codes.count", 6),
+                Map.entry("recovery.backup-codes.length", 10),
+                Map.entry("security-cooldowns.enabled", true),
+                Map.entry("security-cooldowns.commands.changepassword-hours", 72),
+                Map.entry("security-cooldowns.commands.two-factor-setup-hours", 24),
+                Map.entry("security-cooldowns.commands.two-factor-disable-hours", 72),
+                Map.entry("security-cooldowns.commands.security-question-change-hours", 72),
+                Map.entry("security-cooldowns.commands.recovery-method-change-hours", 72),
+                Map.entry("security-cooldowns.commands.backup-code-generate-hours", 24),
+                Map.entry("security-cooldowns.commands.recover-hours", 24),
+                Map.entry("security-cooldowns.custom.enabled", true),
+                Map.entry("security-cooldowns.custom.hours", 24),
+                Map.entry("security-cooldowns.custom.commands", List.of()),
                 Map.entry("auth-settings.captcha.enabled", true),
                 Map.entry("auth-settings.captcha.types", List.of("MAP")),
                 Map.entry("auth-settings.captcha.length", 5),
@@ -686,6 +751,8 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.prompts.login-interval-ticks", 200),
                 Map.entry("auth-settings.prompts.register-repeat-enabled", true),
                 Map.entry("auth-settings.prompts.register-interval-ticks", 200),
+                Map.entry("auth-settings.prompts.two-factor-repeat-enabled", true),
+                Map.entry("auth-settings.prompts.two-factor-interval-ticks", 200),
                 Map.entry("auth-settings.bossbar.enabled", true),
                 Map.entry("auth-settings.bossbar.color", "YELLOW"),
                 Map.entry("auth-settings.bossbar.style", "SOLID"),
@@ -699,7 +766,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.restrictions.prevent-block-place", true),
                 Map.entry("auth-settings.restrictions.prevent-chat", true),
                 Map.entry("auth-settings.restrictions.hide-chat-from-unauthenticated", true),
-                Map.entry("auth-settings.commands.allowed", List.of("/login", "/giris", "/giriş", "/register", "/kayitol", "/kayıtol", "/captcha", "/dogrula", "/doğrula", "/twofactor", "/2fa", "/authenticator", "/authy")),
+                Map.entry("auth-settings.commands.allowed", List.of("/login", "/giris", "/giriş", "/register", "/kayitol", "/kayit", "/kayıtol", "/captcha", "/dogrula", "/doğrula", "/twofactor", "/2fa", "/authenticator", "/authy", "/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")),
                 Map.entry("auth-settings.wrong-password.max-attempts", 3),
                 Map.entry("auth-settings.wrong-password.kick-enabled", true),
                 Map.entry("auth-settings.sounds.enabled", true),
@@ -753,6 +820,10 @@ public final class Aethelguard extends JavaPlugin {
         }
         if (!allowedCommands.contains("/kayıtol")) {
             allowedCommands.add("/kayıtol");
+            changed = true;
+        }
+        if (!allowedCommands.contains("/kayit")) {
+            allowedCommands.add("/kayit");
             changed = true;
         }
         if (changed) {
@@ -969,48 +1040,7 @@ public final class Aethelguard extends JavaPlugin {
                 if (!usersFolder.exists()) usersFolder.mkdirs();
                 rebuildUserIndex();
             }
-            return;
         }
-        if (!getConfig().getBoolean("status.enabled", true)) return;
-
-        File internalDir = new File(getDataFolder(), getSafeFolderName("local-logging.folder", "internal"));
-        boolean isLocalLoggingEnabled = getConfig().getBoolean("local-logging.enabled", true);
-
-        if (!internalDir.exists()) internalDir.mkdirs();
-
-        if (!isLocalLoggingEnabled) {
-            File[] files = internalDir.listFiles();
-            if (files != null) for (File file : files) file.delete();
-
-            String infoFileName = isTurkishConsole()
-                    ? "tüm kayıtlar databasede.txt"
-                    : "all records in database.txt";
-            try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(new File(internalDir, infoFileName)), StandardCharsets.UTF_8)) {
-                writer.write(isTurkishConsole()
-                        ? "Yerel loglama kapalı. Kayıtlar veritabanındadır."
-                        : "Local logging is disabled. Records are in the database.");
-            } catch (IOException e) { e.printStackTrace(); }
-        }
-    }
-
-    public void writeToInternalLog(String fileName, String logData) {
-        if (getConfig().getBoolean("status.enabled", true) || !getConfig().getBoolean("status.enabled", true)) return;
-        if (!getConfig().getBoolean("local-logging.enabled", true)) return;
-
-        String separator = getConfig().getString("local-logging.separator", "--------------------------------------------------");
-        String finalEntry = separator + "\n" + logData + "\n" + separator;
-
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-            File folder = new File(getDataFolder(), getSafeFolderName("local-logging.folder", "internal"));
-            if (!folder.exists()) folder.mkdirs();
-            File logFile = new File(folder, fileName + ".txt");
-
-            try (PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile, true), StandardCharsets.UTF_8)))) {
-                out.println(finalEntry);
-            } catch (IOException e) {
-                logWarning("Log yazma hatası: " + fileName, "Error writing log: " + fileName);
-            }
-        });
     }
 
     public void rebuildUserIndex() {
@@ -1120,6 +1150,22 @@ public final class Aethelguard extends JavaPlugin {
                 File tempFile = new File(getDataFolder(), f);
                 if (tempFile.exists())
                     tempFile.renameTo(outFile);
+            }
+        }
+    }
+
+    private void saveDefaultSecurityQuestionFiles() {
+        File dir = new File(getDataFolder(), "security_questions");
+        if (!dir.exists()) dir.mkdirs();
+
+        for (String f : new String[]{"security_questions_tr.yml", "security_questions_en.yml"}) {
+            File outFile = new File(dir, f);
+            if (!outFile.exists()) {
+                saveResource(f, false);
+                File tempFile = new File(getDataFolder(), f);
+                if (tempFile.exists()) {
+                    tempFile.renameTo(outFile);
+                }
             }
         }
     }
@@ -1379,14 +1425,386 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     public boolean isCaptchaRequired(Player player) {
+        if (shouldBypassCaptchaForTrustedIp(player)) {
+            return false;
+        }
         return getConfig().getBoolean("auth-settings.captcha.enabled", true)
                 && unauthenticatedPlayers.contains(player.getUniqueId())
                 && !captchaVerifiedPlayers.contains(player.getUniqueId());
     }
 
+    public void prepareAdaptiveSecurity(Player player) {
+        if (!getConfig().getBoolean("adaptive-security.enabled", true)) {
+            extraCaptchaPlayers.remove(player.getUniqueId());
+            return;
+        }
+        boolean suspicious = isSuspiciousIp(player);
+        if (suspicious) {
+            extraCaptchaPlayers.put(player.getUniqueId(), true);
+            if (getConfig().getBoolean("console-logging.log-auth-state-changes", true)) {
+                logInfo(
+                        player.getName() + " supheli IP nedeniyle ekstra captcha alacak.",
+                        player.getName() + " will receive extra captcha due to suspicious IP."
+                );
+            }
+        } else {
+            extraCaptchaPlayers.remove(player.getUniqueId());
+        }
+    }
+
+    private boolean ensureVpnCheckReady(Player player) {
+        if (!isVpnCheckEnabled()) return true;
+
+        String ip = getPlayerIp(player);
+        if (ip.equals("UNKNOWN") || shouldSkipVpnCheck(ip)) return true;
+
+        VpnCheckResult cached = getCachedVpnCheck(ip);
+        if (cached != null) return true;
+
+        if (pendingVpnChecks.add(ip)) {
+            runVpnCheckAsync(ip, player.getName(), player.getUniqueId());
+        }
+        return false;
+    }
+
+    private boolean shouldBypassCaptchaForTrustedIp(Player player) {
+        if (!getConfig().getBoolean("adaptive-security.enabled", true)) return false;
+        if (!getConfig().getBoolean("adaptive-security.trusted-ip-captcha-bypass.enabled", true)) return false;
+        if (isSuspiciousIp(player)) return false;
+
+        String ip = getPlayerIp(player);
+        if (ip.equals("UNKNOWN")) return false;
+
+        long windowMillis = Math.max(1L, getConfig().getLong("adaptive-security.trusted-ip-captcha-bypass.window-minutes", 30L)) * 60_000L;
+        int required = Math.max(1, getConfig().getInt("adaptive-security.trusted-ip-captcha-bypass.required-successful-logins", 3));
+        Deque<Long> logins = ipSuccessLogins.get(ip);
+        if (logins == null) return false;
+        pruneIpLoginWindow(logins, windowMillis);
+        return logins.size() >= required;
+    }
+
+    private boolean isSuspiciousIp(Player player) {
+        if (!getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.enabled", true)) return false;
+
+        String ip = getPlayerIp(player);
+        if (getConfig().getStringList("adaptive-security.suspicious-ip-extra-captcha.manual-suspicious-ips").contains(ip)) {
+            return true;
+        }
+
+        VpnCheckResult vpnResult = getCachedVpnCheck(ip);
+        if (vpnResult != null && vpnResult.suspicious()) {
+            return true;
+        }
+
+        int maxAccounts = getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.reasons.max-accounts-per-ip", 3);
+        if (maxAccounts > 0 && countAccountsByIp(ip) >= maxAccounts) {
+            return true;
+        }
+
+        int maxWrong = getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.reasons.max-current-wrong-attempts", 2);
+        return maxWrong > 0 && wrongPasswordAttempts.getOrDefault(player.getUniqueId(), 0) >= maxWrong;
+    }
+
+    public void recordAdaptiveSuccessfulAuth(Player player) {
+        if (!getConfig().getBoolean("adaptive-security.enabled", true)) return;
+        String ip = getPlayerIp(player);
+        if (ip.equals("UNKNOWN")) return;
+        long windowMillis = Math.max(1L, getConfig().getLong("adaptive-security.trusted-ip-captcha-bypass.window-minutes", 30L)) * 60_000L;
+        Deque<Long> logins = ipSuccessLogins.computeIfAbsent(ip, ignored -> new ArrayDeque<>());
+        logins.addLast(System.currentTimeMillis());
+        pruneIpLoginWindow(logins, windowMillis);
+    }
+
+    private void pruneIpLoginWindow(Deque<Long> logins, long windowMillis) {
+        long cutoff = System.currentTimeMillis() - windowMillis;
+        while (!logins.isEmpty() && logins.peekFirst() < cutoff) {
+            logins.removeFirst();
+        }
+    }
+
+    private String getPlayerIp(Player player) {
+        return player.getAddress() == null ? "UNKNOWN" : player.getAddress().getAddress().getHostAddress();
+    }
+
+    public PasswordPolicyResult validatePasswordPolicy(String password, String username) {
+        if (!getConfig().getBoolean("auth-settings.password-policy.enabled", true)) {
+            return PasswordPolicyResult.ok();
+        }
+
+        String safePassword = password == null ? "" : password;
+        int minLength = Math.max(0, getConfig().getInt("auth-settings.password-policy.min-length", 4));
+        int maxLength = Math.max(minLength, getConfig().getInt("auth-settings.password-policy.max-length", 64));
+
+        if (safePassword.length() < minLength) {
+            return PasswordPolicyResult.error("messages.password-policy-too-short", Map.of("min", String.valueOf(minLength)));
+        }
+        if (safePassword.length() > maxLength) {
+            return PasswordPolicyResult.error("messages.password-policy-too-long", Map.of("max", String.valueOf(maxLength)));
+        }
+        if (getConfig().getBoolean("auth-settings.password-policy.require-letter", false)
+                && safePassword.chars().noneMatch(Character::isLetter)) {
+            return PasswordPolicyResult.error("messages.password-policy-require-letter", Map.of());
+        }
+        if (getConfig().getBoolean("auth-settings.password-policy.require-number", false)
+                && safePassword.chars().noneMatch(Character::isDigit)) {
+            return PasswordPolicyResult.error("messages.password-policy-require-number", Map.of());
+        }
+        if (!getConfig().getBoolean("auth-settings.password-policy.allow-turkish-characters", true)
+                && containsTurkishCharacter(safePassword)) {
+            return PasswordPolicyResult.error("messages.password-policy-turkish-characters", Map.of());
+        }
+        if (!getConfig().getBoolean("auth-settings.password-policy.allow-punctuation", true)
+                && containsPunctuation(safePassword)) {
+            return PasswordPolicyResult.error("messages.password-policy-punctuation", Map.of());
+        }
+        if (!getConfig().getBoolean("auth-settings.password-policy.allow-non-alphabet-symbols", false)
+                && containsNonAlphabetSymbol(safePassword)) {
+            return PasswordPolicyResult.error("messages.password-policy-non-alphabet-symbols", Map.of());
+        }
+        if (getConfig().getBoolean("auth-settings.password-policy.block-username", true)
+                && username != null
+                && !username.isBlank()
+                && safePassword.toLowerCase(Locale.ROOT).contains(username.toLowerCase(Locale.ROOT))) {
+            return PasswordPolicyResult.error("messages.password-policy-contains-name", Map.of());
+        }
+        String normalizedPassword = normalizePolicyText(safePassword);
+        for (String blockedWord : getConfig().getStringList("auth-settings.password-policy.blocked-words")) {
+            String normalizedBlockedWord = normalizePolicyText(blockedWord);
+            if (!normalizedBlockedWord.isBlank() && normalizedPassword.contains(normalizedBlockedWord)) {
+                return PasswordPolicyResult.error("messages.password-policy-blocked-word", Map.of());
+            }
+        }
+
+        return PasswordPolicyResult.ok();
+    }
+
+    private boolean containsTurkishCharacter(String value) {
+        return value != null && value.matches(".*[çÇğĞıİöÖşŞüÜ].*");
+    }
+
+    private boolean containsPunctuation(String value) {
+        return value != null && value.matches(".*\\p{Punct}.*");
+    }
+
+    private boolean containsNonAlphabetSymbol(String value) {
+        if (value == null) return false;
+        for (int i = 0; i < value.length(); ) {
+            int codePoint = value.codePointAt(i);
+            i += Character.charCount(codePoint);
+            if (Character.isLetterOrDigit(codePoint) || Character.isWhitespace(codePoint)) {
+                continue;
+            }
+            char[] chars = Character.toChars(codePoint);
+            String character = new String(chars);
+            if (character.matches("\\p{Punct}")) {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private String normalizePolicyText(String value) {
+        if (value == null) return "";
+        return value.toLowerCase(Locale.ROOT)
+                .replace('ç', 'c')
+                .replace('ğ', 'g')
+                .replace('ı', 'i')
+                .replace('ö', 'o')
+                .replace('ş', 's')
+                .replace('ü', 'u');
+    }
+
+    private boolean isVpnCheckEnabled() {
+        return getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.enabled", true)
+                && getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.vpn-check.enabled", true);
+    }
+
+    private boolean shouldSkipVpnCheck(String ip) {
+        if (getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.vpn-check.check-private-ips", false)) {
+            return false;
+        }
+        try {
+            InetAddress address = InetAddress.getByName(ip);
+            return address.isAnyLocalAddress()
+                    || address.isLoopbackAddress()
+                    || address.isLinkLocalAddress()
+                    || address.isSiteLocalAddress()
+                    || address.isMulticastAddress();
+        } catch (IOException ignored) {
+            return true;
+        }
+    }
+
+    private VpnCheckResult getCachedVpnCheck(String ip) {
+        VpnCheckResult result = vpnCheckCache.get(ip);
+        if (result == null) return null;
+        long ttlMillis = Math.max(1L, getConfig().getLong("adaptive-security.suspicious-ip-extra-captcha.vpn-check.cache-minutes", 360L)) * 60_000L;
+        if (System.currentTimeMillis() - result.checkedAt() > ttlMillis) {
+            vpnCheckCache.remove(ip);
+            return null;
+        }
+        return result;
+    }
+
+    private void runVpnCheckAsync(String ip, String playerName, UUID playerUuid) {
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            VpnCheckResult result = checkVpnProviders(ip);
+            vpnCheckCache.put(ip, result);
+            pendingVpnChecks.remove(ip);
+
+            if (getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.vpn-check.log-results", true)) {
+                logInfo(
+                        playerName + " icin VPN kontrolu: " + result.reason(),
+                        "VPN check for " + playerName + ": " + result.reason()
+                );
+            }
+
+            getServer().getScheduler().runTask(this, () -> {
+                Player player = getServer().getPlayer(playerUuid);
+                if (player != null && player.isOnline() && unauthenticatedPlayers.contains(playerUuid) && !captchaChallenges.containsKey(playerUuid)) {
+                    startCaptcha(player);
+                }
+            });
+        });
+    }
+
+    private VpnCheckResult checkVpnProviders(String ip) {
+        List<String> providers = getConfig().getStringList("adaptive-security.suspicious-ip-extra-captcha.vpn-check.providers");
+        if (providers.isEmpty()) providers = List.of("IPWHOIS", "IPAPI");
+
+        int detections = 0;
+        int checked = 0;
+        List<String> reasons = new ArrayList<>();
+        for (String provider : providers) {
+            VpnProviderResult result = queryVpnProvider(provider, ip);
+            if (!result.success()) {
+                reasons.add(provider.toUpperCase(Locale.ROOT) + ":error");
+                continue;
+            }
+            checked++;
+            if (result.suspicious()) detections++;
+            reasons.add(provider.toUpperCase(Locale.ROOT) + ":" + result.reason());
+        }
+
+        int minDetections = Math.max(1, getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.vpn-check.min-detections", 1));
+        boolean failOpen = getConfig().getBoolean("adaptive-security.suspicious-ip-extra-captcha.vpn-check.fail-open", true);
+        boolean suspicious = checked == 0 ? !failOpen : detections >= minDetections;
+        return new VpnCheckResult(suspicious, System.currentTimeMillis(), String.join(", ", reasons));
+    }
+
+    private VpnProviderResult queryVpnProvider(String provider, String ip) {
+        String normalized = provider == null ? "" : provider.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "IPAPI" -> queryIpApi(ip);
+            case "IPWHOIS" -> queryIpWhoIs(ip);
+            default -> new VpnProviderResult(false, false, "unknown-provider");
+        };
+    }
+
+    private VpnProviderResult queryIpWhoIs(String ip) {
+        String body = httpGet("https://ipwho.is/" + ip + "?security=1");
+        if (body == null || body.isBlank() || body.contains("\"success\":false")) {
+            return new VpnProviderResult(false, false, "no-response");
+        }
+        boolean vpn = jsonBoolean(body, "vpn");
+        boolean proxy = jsonBoolean(body, "proxy");
+        boolean tor = jsonBoolean(body, "tor");
+        boolean hosting = jsonBoolean(body, "hosting");
+        boolean suspicious = vpn || proxy || tor || hosting;
+        return new VpnProviderResult(true, suspicious, suspicious ? enabledFlags(vpn, proxy, tor, hosting) : "clean");
+    }
+
+    private VpnProviderResult queryIpApi(String ip) {
+        String body = httpGet("http://ip-api.com/json/" + ip + "?fields=status,message,proxy,hosting,query");
+        if (body == null || body.isBlank() || !body.contains("\"status\":\"success\"")) {
+            return new VpnProviderResult(false, false, "no-response");
+        }
+        boolean proxy = jsonBoolean(body, "proxy");
+        boolean hosting = jsonBoolean(body, "hosting");
+        boolean suspicious = proxy || hosting;
+        return new VpnProviderResult(true, suspicious, suspicious ? enabledFlags(false, proxy, false, hosting) : "clean");
+    }
+
+    private String httpGet(String url) {
+        try {
+            int timeoutMs = Math.max(500, getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.vpn-check.timeout-ms", 2500));
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofMillis(timeoutMs))
+                    .header("User-Agent", "Aethelguard/" + getDescription().getVersion())
+                    .GET()
+                    .build();
+            HttpResponse<String> response = vpnHttpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) return null;
+            return response.body();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private boolean jsonBoolean(String body, String key) {
+        return body.contains("\"" + key + "\":true");
+    }
+
+    private String enabledFlags(boolean vpn, boolean proxy, boolean tor, boolean hosting) {
+        List<String> flags = new ArrayList<>();
+        if (vpn) flags.add("vpn");
+        if (proxy) flags.add("proxy");
+        if (tor) flags.add("tor");
+        if (hosting) flags.add("hosting");
+        return String.join("+", flags);
+    }
+
+    public int countAccountsByIp(String ipAddress) {
+        if (ipAddress == null || ipAddress.isBlank() || ipAddress.equalsIgnoreCase("UNKNOWN")) return 0;
+
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File[] files = getLocalUsersFolder().listFiles((dir, name) -> name.endsWith(".yml"));
+            if (files == null) return 0;
+
+            int count = 0;
+            for (File file : files) {
+                FileConfiguration config = YamlConfiguration.loadConfiguration(file);
+                String registrationIp = config.getString("registration-ip", config.getString("last-ip", ""));
+                if (ipAddress.equals(registrationIp)) count++;
+            }
+            return count;
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return 0;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT COUNT(*) FROM " + getAuthTableName() + " WHERE COALESCE(registration_ip, last_ip) = ?;"
+            )) {
+                ps.setString(1, ipAddress);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return rs.getInt(1);
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        return 0;
+    }
+
     public void startCaptcha(Player player) {
+        if (!ensureVpnCheckReady(player)) {
+            sendMessage(player, "messages.vpn-check-wait", true);
+            updateAuthBossBar(player);
+            return;
+        }
+
+        prepareAdaptiveSecurity(player);
+        if (shouldBypassCaptchaForTrustedIp(player)) {
+            captchaVerifiedPlayers.add(player.getUniqueId());
+            extraCaptchaPlayers.remove(player.getUniqueId());
+            continueAfterCaptcha(player);
+            updateAuthBossBar(player);
+            return;
+        }
+
         if (!getConfig().getBoolean("auth-settings.captcha.enabled", true)) {
             captchaVerifiedPlayers.add(player.getUniqueId());
+            continueAfterCaptcha(player);
             updateAuthBossBar(player);
             return;
         }
@@ -1433,6 +1851,7 @@ public final class Aethelguard extends JavaPlugin {
             removeCaptchaMaps(player);
             playConfiguredSound(player, "auth-settings.captcha.success-sound");
             showCaptchaSuccessPopup(player);
+            continueAfterCaptcha(player);
             updateAuthBossBar(player);
             return true;
         }
@@ -1487,14 +1906,36 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     private void showCaptchaSuccessPopup(Player player) {
-        boolean registered = isAccountRegistered(player.getUniqueId());
+        String subtitlePath = getPostCaptchaMessagePath(player);
         String title = getFormattedMessageString("messages.captcha-success-title", false);
-        String subtitle = getFormattedMessageString(registered ? "messages.captcha-login-popup" : "messages.captcha-register-popup", false);
+        String subtitle = getFormattedMessageString(subtitlePath, false);
         player.showTitle(Title.title(
                 miniMessage.deserialize(title),
                 miniMessage.deserialize(subtitle),
                 Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofMillis(700))
         ));
+    }
+
+    private String getPostCaptchaMessagePath(Player player) {
+        if (shouldSkipPasswordLoginForTwoFactor(player)) {
+            return "messages.captcha-two-factor-popup";
+        }
+        return isAccountRegistered(player.getUniqueId())
+                ? "messages.captcha-login-popup"
+                : "messages.captcha-register-popup";
+    }
+
+    private void continueAfterCaptcha(Player player) {
+        if (shouldSkipPasswordLoginForTwoFactor(player)) {
+            startTwoFactorLogin(player);
+        }
+    }
+
+    public boolean shouldSkipPasswordLoginForTwoFactor(Player player) {
+        return unauthenticatedPlayers.contains(player.getUniqueId())
+                && isAccountRegistered(player.getUniqueId())
+                && isTwoFactorEnabled(player)
+                && !isWaitingTwoFactor(player);
     }
 
     public boolean isWaitingTwoFactor(Player player) {
@@ -1554,6 +1995,7 @@ public final class Aethelguard extends JavaPlugin {
 
         if (setTwoFactorSecret(player.getUniqueId(), secret)) {
             pendingTwoFactorSetups.remove(player.getUniqueId());
+            markSecurityCooldown(player, "two-factor-setup");
             sendMessage(player, "messages.two-factor-enabled", true);
         } else {
             sendMessage(player, "messages.two-factor-error", true);
@@ -1574,9 +2016,342 @@ public final class Aethelguard extends JavaPlugin {
 
         if (setTwoFactorSecret(player.getUniqueId(), null)) {
             pendingTwoFactorSetups.remove(player.getUniqueId());
+            markSecurityCooldown(player, "two-factor-disable");
             sendMessage(player, "messages.two-factor-disabled", true);
         } else {
             sendMessage(player, "messages.two-factor-error", true);
+        }
+    }
+
+    public SecurityQuestion createPendingSecurityQuestion(Player player) {
+        Map<String, String> questions = loadSecurityQuestions();
+        if (questions.isEmpty()) {
+            SecurityQuestion fallback = new SecurityQuestion("fallback", "What is your favorite color?");
+            pendingSecurityQuestions.put(player.getUniqueId(), fallback);
+            return fallback;
+        }
+
+        List<Map.Entry<String, String>> entries = new ArrayList<>(questions.entrySet());
+        Map.Entry<String, String> selected = entries.get(random.nextInt(entries.size()));
+        SecurityQuestion question = new SecurityQuestion(selected.getKey(), selected.getValue());
+        pendingSecurityQuestions.put(player.getUniqueId(), question);
+        return question;
+    }
+
+    public boolean confirmSecurityQuestion(Player player, String answer) {
+        SecurityQuestion question = pendingSecurityQuestions.get(player.getUniqueId());
+        if (question == null) return false;
+        boolean saved = setSecurityQuestion(player.getUniqueId(), question, answer);
+        if (saved) {
+            pendingSecurityQuestions.remove(player.getUniqueId());
+        }
+        return saved;
+    }
+
+    public SecurityQuestion getStoredSecurityQuestion(UUID uuid) {
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File userFile = new File(getLocalUsersFolder(), uuid + ".yml");
+            if (!userFile.exists()) return null;
+            FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
+            String id = config.getString("security-question.id");
+            String text = config.getString("security-question.text");
+            String hash = config.getString("security-question.answer-hash");
+            return id == null || text == null || hash == null ? null : new SecurityQuestion(id, text);
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return null;
+            try (PreparedStatement ps = conn.prepareStatement("SELECT security_question_id, security_question_text, security_question_hash FROM " + getAuthTableName() + " WHERE uuid = ?;")) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next() && rs.getString("security_question_hash") != null) {
+                        return new SecurityQuestion(rs.getString("security_question_id"), rs.getString("security_question_text"));
+                    }
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        return null;
+    }
+
+    public boolean verifySecurityQuestionAnswer(UUID uuid, String answer) {
+        String hash = getSecurityQuestionHash(uuid);
+        return hash != null && BCrypt.checkpw(normalizeRecoveryAnswer(answer), hash);
+    }
+
+    private boolean setSecurityQuestion(UUID uuid, SecurityQuestion question, String answer) {
+        String hash = BCrypt.hashpw(normalizeRecoveryAnswer(answer), BCrypt.gensalt());
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File userFile = new File(getLocalUsersFolder(), uuid + ".yml");
+            if (!userFile.exists()) return false;
+            FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
+            config.set("security-question.id", question.id());
+            config.set("security-question.text", question.text());
+            config.set("security-question.answer-hash", hash);
+            try {
+                config.save(userFile);
+                return true;
+            } catch (IOException ignored) {
+                return false;
+            }
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return false;
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + getAuthTableName() + " SET security_question_id = ?, security_question_text = ?, security_question_hash = ? WHERE uuid = ?;")) {
+                ps.setString(1, question.id());
+                ps.setString(2, question.text());
+                ps.setString(3, hash);
+                ps.setString(4, uuid.toString());
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException ignored) {
+            return false;
+        }
+    }
+
+    private String getSecurityQuestionHash(UUID uuid) {
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File userFile = new File(getLocalUsersFolder(), uuid + ".yml");
+            if (!userFile.exists()) return null;
+            return YamlConfiguration.loadConfiguration(userFile).getString("security-question.answer-hash");
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return null;
+            try (PreparedStatement ps = conn.prepareStatement("SELECT security_question_hash FROM " + getAuthTableName() + " WHERE uuid = ?;")) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return rs.getString("security_question_hash");
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        return null;
+    }
+
+    private Map<String, String> loadSecurityQuestions() {
+        String langCode = getConfig().getString("default-language", "TR").toLowerCase(Locale.ROOT);
+        File dir = new File(getDataFolder(), "security_questions");
+        File file = new File(dir, "security_questions_" + langCode + ".yml");
+        if (!file.exists()) {
+            file = new File(dir, "security_questions_en.yml");
+        }
+        FileConfiguration config = YamlConfiguration.loadConfiguration(file);
+        Map<String, String> questions = new LinkedHashMap<>();
+        org.bukkit.configuration.ConfigurationSection section = config.getConfigurationSection("questions");
+        if (section != null) {
+            for (String key : section.getKeys(false)) {
+                questions.put(key, section.getString(key, key));
+            }
+        }
+        return questions;
+    }
+
+    private String normalizeRecoveryAnswer(String answer) {
+        return answer == null ? "" : answer.trim().toLowerCase(Locale.ROOT);
+    }
+
+    public List<String> generateBackupCodes(Player player) {
+        List<String> codes = new ArrayList<>();
+        List<String> hashes = new ArrayList<>();
+        int count = Math.max(1, getConfig().getInt("recovery.backup-codes.count", 6));
+        int length = Math.max(6, getConfig().getInt("recovery.backup-codes.length", 10));
+        for (int i = 0; i < count; i++) {
+            String code = randomString("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", length);
+            codes.add(code);
+            hashes.add(BCrypt.hashpw(code, BCrypt.gensalt()));
+        }
+        return setBackupCodeHashes(player.getUniqueId(), hashes) ? codes : List.of();
+    }
+
+    public boolean consumeBackupCode(UUID uuid, String code) {
+        List<String> hashes = getBackupCodeHashes(uuid);
+        for (int i = 0; i < hashes.size(); i++) {
+            if (BCrypt.checkpw(code, hashes.get(i))) {
+                hashes.remove(i);
+                return setBackupCodeHashes(uuid, hashes);
+            }
+        }
+        return false;
+    }
+
+    private List<String> getBackupCodeHashes(UUID uuid) {
+        String joined = getAccountString(uuid, "backup-codes.hashes", "backup_code_hashes");
+        if (joined == null || joined.isBlank()) return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(joined.split("\\|")));
+    }
+
+    private boolean setBackupCodeHashes(UUID uuid, List<String> hashes) {
+        return setAccountString(uuid, "backup-codes.hashes", String.join("|", hashes), "backup_code_hashes");
+    }
+
+    public String getRecoveryMethod(UUID uuid) {
+        String method = getAccountString(uuid, "recovery.method", "recovery_method");
+        return method == null || method.isBlank() ? "question" : method;
+    }
+
+    public boolean setRecoveryMethod(UUID uuid, String method) {
+        return setAccountString(uuid, "recovery.method", method, "recovery_method");
+    }
+
+    public boolean updateAccountPassword(UUID uuid, String hash) {
+        return setAccountString(uuid, "password", hash, "password");
+    }
+
+    public long getSecurityCooldownRemainingMillis(Player player, String key) {
+        if (!getConfig().getBoolean("security-cooldowns.enabled", true)) return 0L;
+        long hours = getConfig().getLong("security-cooldowns.commands." + key + "-hours", 0L);
+        if (hours <= 0L) return 0L;
+        return getCooldownRemainingMillis(player.getUniqueId(), key, hours);
+    }
+
+    public void markSecurityCooldown(Player player, String key) {
+        if (!getConfig().getBoolean("security-cooldowns.enabled", true)) return;
+        setCooldownTimestamp(player.getUniqueId(), key, System.currentTimeMillis());
+    }
+
+    public boolean isCustomCommandOnCooldown(Player player, String commandLine) {
+        if (!getConfig().getBoolean("security-cooldowns.enabled", true)) return false;
+        if (!getConfig().getBoolean("security-cooldowns.custom.enabled", true)) return false;
+        String lower = commandLine.toLowerCase(Locale.ROOT);
+        for (String command : getConfig().getStringList("security-cooldowns.custom.commands")) {
+            String normalized = command.toLowerCase(Locale.ROOT);
+            if (lower.equals(normalized) || lower.startsWith(normalized + " ")) {
+                return getCooldownRemainingMillis(player.getUniqueId(), "custom-" + normalized.replace("/", ""), getConfig().getLong("security-cooldowns.custom.hours", 24L)) > 0L;
+            }
+        }
+        return false;
+    }
+
+    public long getCustomCommandCooldownRemainingMillis(Player player, String commandLine) {
+        String lower = commandLine.toLowerCase(Locale.ROOT);
+        for (String command : getConfig().getStringList("security-cooldowns.custom.commands")) {
+            String normalized = command.toLowerCase(Locale.ROOT);
+            if (lower.equals(normalized) || lower.startsWith(normalized + " ")) {
+                return getCooldownRemainingMillis(player.getUniqueId(), "custom-" + normalized.replace("/", ""), getConfig().getLong("security-cooldowns.custom.hours", 24L));
+            }
+        }
+        return 0L;
+    }
+
+    public void markCustomCommandCooldown(Player player, String commandLine) {
+        if (!getConfig().getBoolean("security-cooldowns.custom.enabled", true)) return;
+        String lower = commandLine.toLowerCase(Locale.ROOT);
+        for (String command : getConfig().getStringList("security-cooldowns.custom.commands")) {
+            String normalized = command.toLowerCase(Locale.ROOT);
+            if (lower.equals(normalized) || lower.startsWith(normalized + " ")) {
+                setCooldownTimestamp(player.getUniqueId(), "custom-" + normalized.replace("/", ""), System.currentTimeMillis());
+                return;
+            }
+        }
+    }
+
+    public String formatDuration(long millis) {
+        long seconds = Math.max(1L, (long) Math.ceil(millis / 1000.0));
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long remainingSeconds = seconds % 60;
+        if (hours > 0) return hours + "h " + minutes + "m";
+        if (minutes > 0) return minutes + "m " + remainingSeconds + "s";
+        return remainingSeconds + "s";
+    }
+
+    private long getCooldownRemainingMillis(UUID uuid, String key, long hours) {
+        long lastUsed = getCooldownTimestamp(uuid, key);
+        if (lastUsed <= 0L) return 0L;
+        long expiresAt = lastUsed + hours * 60L * 60L * 1000L;
+        return Math.max(0L, expiresAt - System.currentTimeMillis());
+    }
+
+    private long getCooldownTimestamp(UUID uuid, String key) {
+        String raw = getAccountString(uuid, "security.cooldowns." + key, "security_cooldowns");
+        if (raw == null) return 0L;
+        if (getConfig().getBoolean("database.enabled", false)) {
+            for (String part : raw.split(";")) {
+                String[] pieces = part.split("=", 2);
+                if (pieces.length == 2 && pieces[0].equals(key)) {
+                    try {
+                        return Long.parseLong(pieces[1]);
+                    } catch (NumberFormatException ignored) {
+                        return 0L;
+                    }
+                }
+            }
+            return 0L;
+        }
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    private void setCooldownTimestamp(UUID uuid, String key, long timestamp) {
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            setAccountString(uuid, "security.cooldowns." + key, String.valueOf(timestamp), "security_cooldowns");
+            return;
+        }
+
+        String raw = getAccountString(uuid, "security.cooldowns." + key, "security_cooldowns");
+        Map<String, String> values = new LinkedHashMap<>();
+        if (raw != null && !raw.isBlank()) {
+            for (String part : raw.split(";")) {
+                String[] pieces = part.split("=", 2);
+                if (pieces.length == 2) values.put(pieces[0], pieces[1]);
+            }
+        }
+        values.put(key, String.valueOf(timestamp));
+        List<String> parts = new ArrayList<>();
+        for (Map.Entry<String, String> entry : values.entrySet()) {
+            parts.add(entry.getKey() + "=" + entry.getValue());
+        }
+        setAccountString(uuid, "security.cooldowns." + key, String.join(";", parts), "security_cooldowns");
+    }
+
+    private String getAccountString(UUID uuid, String localPath, String dbColumn) {
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File userFile = new File(getLocalUsersFolder(), uuid + ".yml");
+            if (!userFile.exists()) return null;
+            return YamlConfiguration.loadConfiguration(userFile).getString(localPath);
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return null;
+            try (PreparedStatement ps = conn.prepareStatement("SELECT " + dbColumn + " FROM " + getAuthTableName() + " WHERE uuid = ?;")) {
+                ps.setString(1, uuid.toString());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return rs.getString(dbColumn);
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        return null;
+    }
+
+    private boolean setAccountString(UUID uuid, String localPath, String value, String dbColumn) {
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File userFile = new File(getLocalUsersFolder(), uuid + ".yml");
+            if (!userFile.exists()) return false;
+            FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
+            config.set(localPath, value);
+            try {
+                config.save(userFile);
+                return true;
+            } catch (IOException ignored) {
+                return false;
+            }
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return false;
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + getAuthTableName() + " SET " + dbColumn + " = ? WHERE uuid = ?;")) {
+                ps.setString(1, value);
+                ps.setString(2, uuid.toString());
+                return ps.executeUpdate() > 0;
+            }
+        } catch (SQLException ignored) {
+            return false;
         }
     }
 
@@ -1691,6 +2466,7 @@ public final class Aethelguard extends JavaPlugin {
         captchaChallenges.remove(uuid);
         captchaVerifiedPlayers.remove(uuid);
         captchaCooldowns.remove(uuid);
+        extraCaptchaPlayers.remove(uuid);
     }
 
     public void clearTwoFactorState(UUID uuid) {
@@ -1699,7 +2475,7 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     private CaptchaChallenge createCaptchaChallenge(Player player) {
-        List<String> types = getConfig().getStringList("auth-settings.captcha.types");
+        List<String> types = getCaptchaTypesForPlayer(player);
         if (types.isEmpty()) {
             types = List.of("MAP");
         }
@@ -1735,6 +2511,40 @@ public final class Aethelguard extends JavaPlugin {
                 yield new CaptchaChallenge("TEXT", code, code, 0, expiresAt);
             }
         };
+    }
+
+    private List<String> getCaptchaTypesForPlayer(Player player) {
+        if (!extraCaptchaPlayers.getOrDefault(player.getUniqueId(), false)) {
+            return getConfig().getStringList("auth-settings.captcha.types");
+        }
+
+        String mode = getConfig().getString("adaptive-security.suspicious-ip-extra-captcha.captcha-mode", "RANDOM_EXCEPT_NORMAL").toUpperCase(Locale.ROOT);
+        if (mode.equals("FIXED")) {
+            return List.of(getConfig().getString("adaptive-security.suspicious-ip-extra-captcha.fixed-type", "MATH"));
+        }
+
+        List<String> extraTypes = new ArrayList<>(getConfig().getStringList("adaptive-security.suspicious-ip-extra-captcha.types"));
+        if (extraTypes.isEmpty()) {
+            extraTypes = new ArrayList<>(List.of("TEXT", "NUMERIC", "ALPHANUMERIC", "MATH"));
+        }
+
+        if (mode.equals("RANDOM_EXCEPT_NORMAL")) {
+            Set<String> normalTypes = new HashSet<>();
+            for (String type : getConfig().getStringList("auth-settings.captcha.types")) {
+                normalTypes.add(type.toUpperCase(Locale.ROOT));
+            }
+            List<String> filtered = new ArrayList<>();
+            for (String type : extraTypes) {
+                if (!normalTypes.contains(type.toUpperCase(Locale.ROOT))) {
+                    filtered.add(type);
+                }
+            }
+            if (!filtered.isEmpty()) {
+                return filtered;
+            }
+        }
+
+        return extraTypes;
     }
 
     private String randomString(String alphabet, int length) {
@@ -1864,6 +2674,7 @@ public final class Aethelguard extends JavaPlugin {
         previousLocations.remove(player.getUniqueId());
         restoreAuthInventory(player);
         hideAuthBossBar(player);
+        recordAdaptiveSuccessfulAuth(player);
         updateAccountSnapshot(player, true);
         sendMessage(player, "messages.session-login-success", true);
 
@@ -1894,6 +2705,9 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     private record AuthInventorySnapshot(ItemStack[] storage, ItemStack[] armor, ItemStack[] extra) {
+    }
+
+    public record SecurityQuestion(String id, String text) {
     }
 
     private record CaptchaChallenge(String type, String display, String answer, int attempts, long expiresAt) {
@@ -1981,6 +2795,22 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     private record AuthSession(String ipAddress, long expiresAt) {
+    }
+
+    private record VpnCheckResult(boolean suspicious, long checkedAt, String reason) {
+    }
+
+    private record VpnProviderResult(boolean success, boolean suspicious, String reason) {
+    }
+
+    public record PasswordPolicyResult(boolean valid, String messagePath, Map<String, String> placeholders) {
+        private static PasswordPolicyResult ok() {
+            return new PasswordPolicyResult(true, "", Map.of());
+        }
+
+        private static PasswordPolicyResult error(String messagePath, Map<String, String> placeholders) {
+            return new PasswordPolicyResult(false, messagePath, placeholders);
+        }
     }
 
     public MiniMessage getMiniMessage() { return miniMessage; }

@@ -1,0 +1,14 @@
+# ============================================================
+#              AETHELGUARD GUVENLIK SORULARI
+# ============================================================
+# Bu dosyaya istedigin kadar soru ekleyebilirsin.
+# default-language: "TR" ise bu dosya kullanilir.
+# Her key benzersiz olmalidir.
+# ============================================================
+
+questions:
+  favorite-color: "En sevdigin renk nedir?"
+  favorite-number: "En sevdigin sayi nedir?"
+  favorite-character: "En sevdigin film veya oyun karakteri kimdir?"
+  first-pet: "Ilk evcil hayvaninin adi neydi?"
+  favorite-food: "En sevdigin yemek nedir?"

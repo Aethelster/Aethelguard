@@ -1,67 +1,86 @@
-# Aethelguard
+# 🛡️ Aethelguard
 
-> Paper tabanlı Minecraft sunucuları için temiz loglu, özelleştirilebilir ve güvenli bir auth eklentisi.
+> Paper tabanlı Minecraft sunucuları için temiz loglu, yüksek özelleştirilebilirlik sunan, captcha + 2FA + recovery + adaptive security destekli modern auth eklentisi.
 
-Aethelguard, oyuncular sunucuya girdiğinde onları doğrulama tamamlanana kadar kontrollü bir güvenlik ekranında tutar. Oyuncu captcha, login, register veya 2FA aşamasındayken dünyaya, chate ve riskli komutlara erişemez; doğrulama tamamlandığında da kaldığı yerden güvenli şekilde oyuna döner.
+Aethelguard, oyuncular sunucuya girdiğinde onları doğrulama tamamlanana kadar kontrollü bir güvenlik ekranında tutar. Oyuncu captcha, login/register, 2FA veya recovery aşamasındayken dünyaya, chate ve riskli komutlara erişemez. Doğrulama tamamlandığında envanteri geri verilir, bossbar temizlenir ve güvenli konumuna döner.
 
-Amaç basit: Auth sistemi güçlü olsun, console temiz kalsın, sunucu sahibi de neredeyse her davranışı configten rahatça ayarlayabilsin. ✨
+Amaç basit: **auth güçlü olsun, console temiz kalsın, admin her şeyi configten rahatça yönetebilsin.** ✨
 
-## 🚀 Neler Sunar?
+---
 
-- 🔐 `/register` ve `/login` tabanlı hesap sistemi
+## 🚀 Öne Çıkanlar
+
+- 🔐 `/register`, `/login`, `/changepassword` hesap sistemi
 - 🧂 BCrypt ile güvenli şifre hashleme
 - 💾 Local YAML veya MySQL depolama
-- 🧩 `/aethelguard status` ile detaylı oyuncu auth bilgileri
-- 🛡️ Captcha sistemi: map, text, numeric, alphanumeric ve math türleri
-- 🗺️ Varsayılan map captcha desteği
-- 📱 TOTP tabanlı 2FA: Google Authenticator, Microsoft Authenticator, Authy ve benzeri uygulamalarla uyumlu
-- 🔁 Session auto-login desteği
-- 🌍 Login/register öncesi oyuncuyu void-zone alanına alma
-- 📍 Login sonrası son güvenli konuma geri döndürme
-- 🏠 İlk register sonrası spawn noktasına gönderme
-- 🎒 Auth ekranında oyuncunun envanterini, zırhını ve offhand itemini gizleme
-- 🧼 Auth sonrası oyuncunun kendi chat ekranını temizleme
-- 💬 Login ekranındaki oyuncuların normal chati görmesini engelleme
-- 📊 Auth aşamasına göre bossbar gösterme
-- 🔇 Vanilla join/quit/connection/command loglarını susturma
-- 📝 Sadece önemli auth olaylarını Aethelguard formatında loglama
-- 🌐 Oyuncu mesajları için `messages_<code>.yml` dil sistemi
-- ⚙️ Yeni config ayarlarını otomatik ekleyen ve config düzenini commentleriyle koruyan sistem
+- 🧩 Detaylı `config.yml` ve otomatik config düzenleme sistemi
+- 🌐 `messages_<code>.yml` dil sistemi
+- 🇹🇷 Türkçe ve İngilizce hazır mesaj dosyaları
+- 🖥️ Console için `en`, `tr native`, `tr ascii` log desteği
+- 🧼 Vanilla join/quit/connection/command loglarını susturma
+- 🧠 Adaptive security ve VPN/proxy kontrolü
+- 🧪 Captcha sistemi: `MAP`, `TEXT`, `NUMERIC`, `ALPHANUMERIC`, `MATH`
+- 🗺️ Harita üstünde gerçek captcha kodu gösterimi
+- 📱 TOTP 2FA: Google Authenticator, Microsoft Authenticator, Authy uyumlu
+- 🔁 Session auto-login
+- 🧯 Security question ve backup code tabanlı account recovery
+- ⏳ Hassas güvenlik komutları için cooldown sistemi
+- 🔑 Gelişmiş şifre politikası
+- 📊 `/aethelguard status` ve session yönetimi
+- 🎒 Auth sırasında envanter, zırh ve offhand gizleme
+- 💬 Auth olmamış oyuncuların chat görmesini/konuşmasını engelleme
+- 📌 Auth durumuna göre bossbar yönlendirmeleri
+- 🧭 İlk register sonrası spawn yönlendirmesi
+- 🕳️ Void-zone güvenli bekleme alanı
 
-## 🛠️ Kurulum
+---
 
-1. 📦 Jar dosyasını sunucunun `plugins` klasörüne at.
+## 📦 Kurulum
+
+1. 📁 `aethelguard-0.3-sentinel.jar` dosyasını sunucunun `plugins` klasörüne at.
 2. ▶️ Sunucuyu başlat.
-3. ⚙️ Oluşan `plugins/Aethelguard/config.yml` dosyasını kendi sunucuna göre düzenle.
-4. 🌐 Mesajları değiştirmek istersen `plugins/Aethelguard/messages/` içindeki dil dosyalarını düzenle.
-5. 🔁 Database veya temel auth davranışlarını değiştirdiysen sunucuyu yeniden başlat.
+3. ⚙️ `plugins/Aethelguard/config.yml` dosyasını düzenle.
+4. 🌍 Mesajları değiştirmek istersen `plugins/Aethelguard/messages/` klasörünü kullan.
+5. 🧠 Güvenlik sorularını değiştirmek istersen `plugins/Aethelguard/security_questions/` klasörünü düzenle.
+6. 🔁 Database veya temel auth ayarlarını değiştirdiysen sunucuyu yeniden başlat.
 
-Ayarların çoğu reload ile yenilenebilir:
+Çoğu ayar reload ile yenilenebilir:
 
 ```text
 /aethelguard reload
 ```
 
-## ⌨️ Komutlar
+---
+
+## ⌨️ Oyuncu Komutları
 
 | Komut | Aliaslar | Açıklama |
 | --- | --- | --- |
-| `/register <şifre> <şifre tekrar>` | `/kayitol`, `/kayıtol`, `/kayit` | Yeni oyuncu hesabı oluşturur. |
-| `/login <şifre>` | `/giris`, `/giriş` | Kayıtlı hesaba giriş yapar. |
+| `/register <şifre> <şifre tekrar>` | `/kayitol`, `/kayıtol`, `/kayit` | Yeni hesap oluşturur. |
+| `/login <şifre>` | `/giris`, `/giriş` | Hesaba giriş yapar. |
 | `/captcha <kod>` | `/dogrula`, `/doğrula` | Captcha doğrulamasını tamamlar. |
-| `/twofactor <kod>` | `/2fa`, `/authenticator`, `/authy` | Login sırasında 2FA kodunu doğrular. |
-| `/twofactor setup` | `/2fa setup` | Oyuncunun hesabına authenticator kurulumunu başlatır. |
-| `/twofactor confirm <kod>` | `/2fa confirm <kod>` | 2FA kurulumunu tamamlar. |
-| `/twofactor disable <kod>` | `/2fa disable <kod>` | Oyuncunun 2FA korumasını kapatır. |
 | `/changepassword <eski> <yeni> <yeni tekrar>` | `/sifredegistir`, `/şifredeğiştir`, `/password` | Oyuncunun kendi şifresini değiştirmesini sağlar. |
+| `/twofactor <kod>` | `/2fa`, `/authenticator`, `/authy` | Login sırasında 2FA kodunu doğrular. |
+| `/twofactor setup` | `/2fa setup` | Authenticator kurulumunu başlatır. |
+| `/twofactor confirm <kod>` | `/2fa confirm <kod>` | 2FA kurulumunu tamamlar. |
+| `/twofactor disable <kod>` | `/2fa disable <kod>` | 2FA korumasını kapatır. |
+| `/securityquestion setup` | `/securityq`, `/guvenliksorusu` | Güvenlik sorusu seçimini başlatır. |
+| `/securityquestion answer <cevap>` | `/securityq answer` | Güvenlik sorusu cevabını kaydeder. |
+| `/backupcodes generate` | `/backupcode`, `/yedekkodlar` | Tek kullanımlık recovery kodları üretir. |
+| `/recoverymethod question` | `/recovery` | Recovery yöntemini güvenlik sorusu yapar. |
+| `/recoverymethod backup-code` | `/recovery` | Recovery yöntemini backup code yapar. |
+| `/recover question <cevap> <yeniŞifre>` | `/sifresifirla`, `/kurtar` | Güvenlik sorusuyla şifre sıfırlar. |
+| `/recover code <kod> <yeniŞifre>` | `/sifresifirla`, `/kurtar` | Backup code ile şifre sıfırlar. |
+
+---
 
 ## 👑 Admin Komutları
 
 | Komut | Açıklama |
 | --- | --- |
-| `/aethelguard reload` | Config, dil dosyaları ve database bağlantısını yeniler. |
-| `/aethelguard status <oyuncu>` | Oyuncunun kayıt, login, IP, konum, yanlış deneme ve depolama durumunu gösterir. |
-| `/aethelguard sessions` | Aktif session listesini gösterir. |
+| `/aethelguard reload` | Config, mesajlar ve database bağlantısını yeniler. |
+| `/aethelguard status <oyuncu>` | Oyuncunun auth kaydını, IP bilgisini, konumunu ve deneme sayılarını gösterir. |
+| `/aethelguard sessions` | Aktif auth session listesini gösterir. |
 | `/aethelguard session <oyuncu>` | Oyuncunun aktif session bilgisini gösterir. |
 | `/aethelguard clearsession <oyuncu>` | Bir oyuncunun session kaydını temizler. |
 | `/aethelguard clearsessions` | Tüm session kayıtlarını temizler. |
@@ -77,24 +96,35 @@ Admin aliasları:
 /ayarlar
 ```
 
+---
+
 ## 🧭 Auth Akışı
 
 Oyuncu sunucuya girdiğinde Aethelguard önce güvenli konumunu hatırlar. Ardından oyuncu auth ekranına alınır.
 
 Varsayılan akış:
 
-1. 🌌 Oyuncu void-zone konumuna taşınır.
+1. 🕳️ Oyuncu void-zone konumuna taşınır.
 2. 🎒 Envanteri, zırhları ve offhand itemi geçici olarak gizlenir.
-3. 🛡️ Captcha gerekiyorsa önce captcha çözmesi istenir.
-4. 🔐 Hesabı yoksa `/register`, hesabı varsa `/login` istenir.
-5. 📱 Hesapta 2FA açıksa `/2fa <kod>` istenir.
-6. ✅ Auth tamamlanınca bossbar kaldırılır, envanter geri verilir ve oyuncu güvenli konumuna döner.
+3. 🧠 IP ve risk durumu kontrol edilir.
+4. 🧪 Captcha gerekiyorsa captcha çözmesi istenir.
+5. 🔐 Hesabı yoksa `/register`, hesabı varsa `/login` istenir.
+6. 📱 Hesapta 2FA açıksa `/2fa <kod>` istenir.
+7. ✅ Auth tamamlanınca bossbar kaldırılır, envanter geri verilir ve oyuncu güvenli konuma döner.
 
-İlk kayıt sonrasında oyuncu spawn noktasına gönderilir. Oyuncu auth olmadan çıkarsa veya timeout yerse void-zone konumu son konum olarak kaydedilmez.
+Önemli detaylar:
 
-## 🛡️ Captcha
+- 🏠 İlk register sonrasında oyuncu spawn noktasına gönderilir.
+- 🕳️ Oyuncu auth olmadan çıkarsa void-zone konumu son konum olarak kaydedilmez.
+- 🧼 Login/register sonrası sadece oyuncunun kendi chat ekranı temizlenir.
+- 💬 Login ekranındaki oyuncular normal oyuncu chatini göremez.
+- 🎒 Captcha map itemi gerçek oyuncu envanterine kalıcı olarak karışmaz.
 
-Captcha login/register öncesinde çalışır. Varsayılan tür `MAP` captchadır.
+---
+
+## 🧪 Captcha Sistemi
+
+Aethelguard captcha sistemi login/register öncesinde çalışır.
 
 Desteklenen türler:
 
@@ -104,7 +134,7 @@ Desteklenen türler:
 - 🔡 `ALPHANUMERIC`
 - ➕ `MATH`
 
-Configte varsayılan:
+Varsayılan:
 
 ```yml
 auth-settings:
@@ -113,121 +143,331 @@ auth-settings:
     types: ["MAP"]
 ```
 
-Birden fazla tür yazarsan plugin captcha türünü rastgele seçebilir:
+Birden fazla captcha türü kullanmak istersen:
 
 ```yml
 types: ["MAP", "TEXT", "NUMERIC", "ALPHANUMERIC", "MATH"]
 ```
 
-Captcha deneme hakkı ve kick ayarı, login yanlış şifre denemesinden ayrıdır. Böylece captcha için 5 deneme, login için 3 deneme gibi farklı güvenlik kuralları kullanabilirsin.
+Captcha güvenliği ayrı yönetilir:
 
-## 📡 2FA / Authenticator
+- ⏱️ `cooldown-seconds`
+- 🎯 `max-attempts`
+- 👢 `kick-enabled`
+- 🗺️ `map.give-item`
+- 🔊 `success-sound`
 
-Aethelguard TOTP standardını kullanır. Bu yüzden şu uygulamalarla uyumludur:
+Captcha deneme hakkı, yanlış şifre deneme hakkından ayrıdır. Böylece captcha için 5 hak, login için 3 hak gibi farklı kurallar kullanabilirsin.
+
+---
+
+## 📱 2FA / Authenticator
+
+Aethelguard TOTP standardını kullanır. Şu uygulamalarla uyumludur:
 
 - 📱 Google Authenticator
 - 🔐 Microsoft Authenticator
 - 🟣 Authy
 - 🧩 TOTP destekleyen benzer uygulamalar
 
-Oyuncu kurulumu:
+Kurulum:
 
 ```text
 /2fa setup
 /2fa confirm <kod>
 ```
 
-Sonraki girişlerde doğru şifre girildikten sonra oyuncudan authenticator kodu istenir:
+2FA açık oyuncularda captcha sonrası doğrudan `/2fa <kod>` akışına geçilebilir. Böylece oyuncu arka arkaya captcha + login + 2FA yapmak zorunda kalmaz.
+
+---
+
+## 🧯 Account Recovery
+
+0.3-sentinel ile recovery sistemi çok daha güçlü hale geldi.
+
+Desteklenen yöntemler:
+
+- 🧠 Güvenlik sorusu
+- 🧾 Tek kullanımlık backup code
+
+Oyuncu recovery yöntemini seçebilir:
 
 ```text
-/2fa <kod>
+/recoverymethod question
+/recoverymethod backup-code
 ```
 
-## 🔒 Config Sistemi
+Şifre sıfırlama:
 
-Aethelguard config dosyasını sunucu açılışında ve reload sırasında kontrol eder.
+```text
+/recover question <cevap> <yeniŞifre>
+/recover code <yedekKod> <yeniŞifre>
+```
 
-Sistem şunları yapar:
+Admin isterse yöntemleri ayrı ayrı kapatabilir:
+
+```yml
+recovery:
+  security-questions:
+    enabled: true
+  backup-codes:
+    enabled: true
+```
+
+---
+
+## 🧠 Adaptive Security
+
+Aethelguard, oyuncunun IP geçmişine ve risk sinyallerine göre auth davranışını değiştirebilir.
+
+Özellikler:
+
+- ✅ Güvenilir IP captcha bypass
+- 🚨 Şüpheli IP için ekstra captcha
+- 📌 Manuel suspicious IP listesi
+- 🧪 Şüpheli oyuncular için farklı captcha türü
+- 🧭 Aynı IP’den çok hesap açılmışsa risk sinyali
+- ❌ Yanlış şifre denemesi artarsa risk sinyali
+
+Örnek:
+
+```yml
+adaptive-security:
+  trusted-ip-captcha-bypass:
+    enabled: true
+    window-minutes: 30
+    required-successful-logins: 3
+```
+
+---
+
+## 🕵️ VPN / Proxy Kontrolü
+
+0.3-sentinel ile VPN/proxy kontrolü eklendi.
+
+Desteklenen providerlar:
+
+- 🌐 `IPWHOIS`
+- 🌐 `IPAPI`
+
+Kontrol edilen sinyaller:
+
+- VPN
+- Proxy
+- Tor
+- Hosting/datacenter
+
+Örnek config:
+
+```yml
+adaptive-security:
+  suspicious-ip-extra-captcha:
+    vpn-check:
+      enabled: true
+      providers: ["IPWHOIS", "IPAPI"]
+      min-detections: 1
+      timeout-ms: 2500
+      cache-minutes: 360
+      fail-open: true
+```
+
+Notlar:
+
+- 🧠 Sonuçlar cache’lenir.
+- ⏱️ Timeout düşük tutulur ki login ekranı uzun beklemesin.
+- 🧪 VPN/proxy şüpheli bulunursa ekstra captcha uygulanır.
+- 🏠 Local/private IP’ler default olarak kontrol edilmez.
+
+---
+
+## 🔑 Şifre Politikası
+
+0.3-sentinel ile şifre kuralları çok daha detaylı hale geldi.
+
+Yönetilebilenler:
+
+- Minimum uzunluk
+- Maximum uzunluk
+- Harf zorunluluğu
+- Sayı zorunluluğu
+- Kullanıcı adını şifrede engelleme
+- Türkçe karakter izni
+- Noktalama işareti izni
+- Emoji/özel font/alışılmadık sembol izni
+- Yasaklı kelime listesi
+
+Örnek:
+
+```yml
+auth-settings:
+  password-policy:
+    enabled: true
+    min-length: 4
+    max-length: 64
+    require-letter: false
+    require-number: false
+    block-username: true
+    allow-turkish-characters: true
+    allow-punctuation: true
+    allow-non-alphabet-symbols: false
+    blocked-words:
+      - "admin"
+      - "password"
+      - "sifre"
+      - "şifre"
+```
+
+Bu kurallar şu akışlarda ortaktır:
+
+- `/register`
+- `/changepassword`
+- `/recover`
+- `/aethelguard changepassword`
+
+---
+
+## ⏳ Security Cooldowns
+
+Hassas hesap güvenliği komutları için cooldown sistemi vardır.
+
+Varsayılan örnekler:
+
+- Şifre değiştirme
+- 2FA kurma
+- 2FA kapatma
+- Güvenlik sorusu değiştirme
+- Recovery yöntemi değiştirme
+- Backup code üretme
+- Recover ile şifre sıfırlama
+
+Adminler ayrıca kendi komutlarını listeye ekleyebilir:
+
+```yml
+security-cooldowns:
+  custom:
+    enabled: true
+    hours: 24
+    commands: []
+```
+
+---
+
+## 🔄 Session Auto-Login
+
+Oyuncu başarılı login/register sonrası kısa süreli session alabilir.
+
+```yml
+auth-settings:
+  sessions:
+    enabled: true
+    duration-minutes: 10
+    match-ip: true
+```
+
+`match-ip: true` önerilir. Böylece session sadece aynı IP’den geçerli olur.
+
+---
+
+## 🧩 Config Sync Sistemi
+
+Aethelguard config dosyasını açılışta ve reload sırasında kontrol eder.
+
+Yaptıkları:
 
 - 🧩 Eksik config keylerini ekler.
-- 🛡️ Mevcut değerleri korur.
-- 📌 Yeni eklenen ayarları dosyanın en altına atmaz.
-- 🗂️ Ayarları gerçek config şablonundaki doğru bölüme taşır.
-- 📝 Commentleri koruyarak dosyayı düzenli hale getirir.
-- 🔵 Bilinen ayarlar yanlış yerdeyse doğru yere taşır ve console’a mavi log basar.
+- 📝 Yeni keyleri commentleriyle ekler.
+- 📌 Yeni ayarları dosyanın en altına atmaz.
+- 🗂️ Ayarları doğru kategoriye taşır.
+- 🔵 Düzenleme yaptığında console’a mavi bilgi logu basar.
+- 🛡️ Mevcut admin değerlerini korur.
+- 🧼 Eski `local-logging` bloğunu temizler.
 
-Bu sayede eski config kullanan bir sunucu yeni sürüme geçtiğinde ayarlarını kaybetmeden güncel config yapısına yaklaşır.
+Bu sistem özellikle eski sürümden yeni sürüme geçen sunucular için tasarlandı.
 
-## 📞 Dil Sistemi
+---
+
+## 🌍 Dil Sistemi
 
 Oyuncu mesajları `messages_<code>.yml` dosyalarından okunur.
 
-Varsayılan dosyalar:
+Hazır diller:
 
 - 🇹🇷 `messages_tr.yml`
 - 🇬🇧 `messages_en.yml`
 
-Özel dil eklemek için:
+Özel dil eklemek:
 
-1. 📄 `plugins/Aethelguard/messages/messages_de.yml` gibi bir dosya oluştur.
-2. 🧱 İçine mevcut mesaj keylerini ekle.
-3. ✍️ Çevirileri düzenle.
-4. ⚙️ Configte dili değiştir:
+1. `plugins/Aethelguard/messages/messages_de.yml` oluştur.
+2. Mevcut mesaj keylerini ekle.
+3. Çevirileri düzenle.
+4. Configte dili değiştir:
 
 ```yml
 default-language: "DE"
 ```
 
-`default-language` özel dil dosyalarını destekler. `console-language` ise yalnızca plugin console logları içindir ve sadece `en` / `tr` mantığıyla çalışır.
+`default-language` özel dil dosyalarını destekler.  
+`console-language` yalnızca console logları içindir.
 
-## 🗒 Console Dili
+---
 
-Console logları için ayrı dil ayarı bulunur:
+## 🖥️ Console Dili
+
+Console logları ayrı yönetilir:
 
 ```yml
 console-language: "tr"
 console-text-mode: "ascii"
 ```
 
-`console-text-mode` sadece `console-language: "tr"` iken kullanılır.
+Modlar:
 
 - 📝 `native`: Türkçe karakterleri olduğu gibi yazar. Örnek: `başarıyla giriş yaptı`
 - 🖥️ `ascii`: Türkçe karakterleri console-safe hale getirir. Örnek: `basariyla giris yapti`
 
-Hosting panelin veya console ekranın Türkçe karakterleri bozuyorsa `ascii` kullanman önerilir.
+Hosting panelin Türkçe karakterleri bozuyorsa `ascii` kullanman önerilir.
 
-## 📝 Log Sistemi
+---
+
+## 🧼 Log Sistemi
 
 Aethelguard gereksiz vanilla log kalabalığını azaltabilir.
 
-Filtrelenebilen loglar:
+Filtrelenebilenler:
 
-- 🔕 `joined the game`
-- 🔕 `left the game`
-- 🔕 `logged in with entity id`
-- 🔕 `lost connection`
-- 🔕 `UUID of player`
-- 🔕 `issued server command`
+- `joined the game`
+- `left the game`
+- `logged in with entity id`
+- `lost connection`
+- `UUID of player`
+- `issued server command`
 
-`/login`, `/register` gibi şifre içeren komutlar console’a şifreyle düşmesin diye ayrıca sessiz işlenir.
+Şifre içeren `/login` ve `/register` komutları console’a düz şekilde düşmez.
 
-Auth başarıları, auto-login, unregister, unlogin ve benzeri durumlar Aethelguard loglarıyla takip edilebilir.
+Aethelguard kendi önemli olaylarını temiz loglar:
 
-## 🛢 Depolama
+- Login success
+- Register success
+- Auto-login success
+- Auth olmadan çıkış
+- Auth olmuş oyuncu çıkışı
+- Admin unregister
+- Admin unlogin
+- Password change
+- VPN kontrol sonucu
 
-Local kullanımda oyuncu kayıtları şu klasörde tutulur:
+---
+
+## 💾 Depolama
+
+Local mod:
 
 ```text
-plugins/Aethelguard/users/
-```
-
-Local modda ayrıca username ve UUID eşleşmeleri için index dosyası oluşturulabilir:
-
-```text
+plugins/Aethelguard/users/<uuid>.yml
 plugins/Aethelguard/users/user-index.txt
 ```
 
-MySQL kullanmak için:
+MySQL mod:
 
 ```yml
 database:
@@ -239,7 +479,85 @@ database:
   password: "password123"
 ```
 
-Tablo adı yalnızca harf, sayı ve alt çizgi içermelidir.
+Local YAML sistemi kaldırılmadı. MySQL kapalıysa plugin local user dosyalarıyla çalışır.
+
+---
+
+## 🧾 0.2-sentinel → 0.3-sentinel Farkları
+
+0.2-sentinel, temiz auth akışı ve düzenli console logları üzerine kurulu ilk tam sürümdü. 0.3-sentinel ise Aethelguard’ı daha ciddi bir güvenlik paketine dönüştürüyor.
+
+### 🔐 Auth ve Güvenlik
+
+- 0.2’de temel login/register vardı.
+- 0.3’te captcha, 2FA, recovery ve adaptive security birlikte çalışıyor.
+- 2FA açık oyuncular captcha sonrası direkt `/2fa` akışına gidebiliyor.
+- Şüpheli IP’ler ekstra captcha alabiliyor.
+- Güvenilir IP’ler belirli şartlarda captcha bypass alabiliyor.
+
+### 🧪 Captcha
+
+- 0.2’de captcha yoktu.
+- 0.3’te map captcha ve alternatif captcha türleri geldi.
+- Captcha deneme hakkı yanlış şifre denemesinden ayrıldı.
+- Captcha cooldown ve kick davranışı ayrı ayarlanabiliyor.
+- Map item auth sonrası oyuncunun elinden temizleniyor.
+
+### 📱 2FA
+
+- 0.2’de 2FA yoktu.
+- 0.3’te TOTP tabanlı authenticator desteği geldi.
+- Google Authenticator, Microsoft Authenticator, Authy ve benzeri uygulamalar destekleniyor.
+
+### 🧯 Recovery
+
+- 0.2’de şifre sıfırlama/recovery sistemi yoktu.
+- 0.3’te güvenlik sorusu ve backup code sistemi geldi.
+- Oyuncu kendi recovery yöntemini seçebiliyor.
+- Admin isterse security question veya backup code sistemini ayrı ayrı kapatabiliyor.
+
+### 🧠 Adaptive Security
+
+- 0.2’de IP bazlı gelişmiş risk kontrolü yoktu.
+- 0.3’te trusted IP captcha bypass, suspicious IP extra captcha ve VPN/proxy detection geldi.
+
+### 🔑 Şifre Politikası
+
+- 0.2’de şifre kuralları sınırlıydı.
+- 0.3’te min/max uzunluk, harf/sayı zorunluluğu, username engeli, yasak kelime listesi, Türkçe karakter, noktalama ve emoji/sembol kontrolü geldi.
+
+### 🧩 Config Sistemi
+
+- 0.2’de config daha düzenli hale getirilmeye başlanmıştı.
+- 0.3’te config sync sistemi çok daha olgunlaştı.
+- Eksik ayarlar commentleriyle doğru yere ekleniyor.
+- Yanlış yerdeki bilinen ayarlar doğru kategoriye taşınıyor.
+- Eski `local-logging` bloğu temizleniyor.
+
+### 🖥️ Console ve Dil
+
+- 0.2’de console dili TR/EN ayrımı vardı.
+- 0.3’te Türkçe console için `native` ve `ascii` text mode daha sağlam hale geldi.
+- Messages EN/TR keyleri eşit tutuldu.
+- Yeni tüm oyuncu mesajları messages dosyalarına bağlandı.
+
+---
+
+## 🛣️ Gelecek Planları
+
+Planlanan büyük fikirler:
+
+- 🔢 PIN ile giriş sistemi
+- 🧰 Oyuncu ayarları için GUI
+- 👑 Yetkili komutları için GUI
+- 🎫 Discord entegre ticket sistemi
+- 🎨 ItemsAdder, Nexo, Oraxen gibi resource-pack pluginleriyle uyum
+- 🧬 LuckPerms entegrasyonu
+- 🌐 Web panel
+- 📊 Oyuncu ve yetkili aktivite raporları
+- 🏆 Yetkili performans sıralaması
+
+---
 
 ## 🔑 İzinler
 
@@ -248,84 +566,7 @@ Tablo adı yalnızca harf, sayı ve alt çizgi içermelidir.
 | `aethelguard.admin` | Admin komutlarını kullanma izni. Varsayılan: OP |
 | `aethelguard.bypass.iplimit` | IP kayıt limitini bypass eder. Varsayılan: OP |
 
-## 📰 Sürüm Notları
-
-### 0.2-sentinel Nasıldı?
-
-`0.2-sentinel`, Aethelguard’ın temiz auth akışı ve düzenli console logları üzerine oturan ilk tam sürümüydü. Bu sürümde temel hedef, oyuncular login/register olmadan sunucuya karışamasın ama console da şifreli komutlar ve vanilla connection loglarıyla dolmasın fikriydi.
-
-0.2-sentinel ile gelen ana yapı:
-
-- 🔐 `/login`, `/register` ve `/changepassword` komutları
-- 💾 Local YAML ve MySQL depolama
-- 🧂 BCrypt şifre hashleme
-- 🌌 Void-zone auth bekleme alanı
-- 📍 Login sonrası son güvenli konuma dönüş
-- 🏠 İlk register sonrası spawn yönlendirmesi
-- 🧼 Login/register sonrası oyuncu chatini temizleme
-- 💬 Login ekranındaki oyuncuların normal chati görmesini engelleme
-- 🔇 Vanilla join/quit/connection loglarını susturma
-- 📝 Başarılı login/register için temiz Aethelguard console logları
-- ⚙️ Açıklamalı ve kategorilere ayrılmış config yapısı
-- 🌐 `messages_tr.yml`, `messages_en.yml` ve özel `messages_<code>.yml` dil desteği
-
-### Yeni Geliştirme Sürümünde Ne Değişti?
-
-0.2-sentinel sonrası geliştirme sürümü, auth sistemini sadece “şifre gir ve geç” yapısından çıkarıp daha güvenli ve daha yönetilebilir bir giriş ekranına çevirdi.
-
-Yeni eklenenler ve değişenler:
-
-- 🛡️ Captcha sistemi eklendi.
-- 🗺️ Varsayılan map captcha eklendi.
-- 🔤 Text, numeric, alphanumeric ve math captcha türleri hazırlandı.
-- ⏱️ Captcha cooldown, deneme hakkı ve kick ayarları eklendi.
-- 🧮 Captcha attemptleri login/register yanlış şifre attemptlerinden ayrıldı.
-- 📱 TOTP tabanlı 2FA / Authenticator sistemi eklendi.
-- 🔐 Google Authenticator, Microsoft Authenticator ve Authy uyumlu 2FA akışı hazırlandı.
-- 📊 Auth aşamasına göre bossbar yönlendirmeleri eklendi.
-- 🌐 Captcha, login, register ve 2FA için bossbar metinleri messages dosyalarına bağlandı.
-- 🎒 Oyuncu auth ekranındayken envanter, zırh ve offhand itemleri gizlenir hale geldi.
-- ✅ Auth bitince envanter güvenli şekilde geri verilir hale getirildi.
-- 🗺️ Captcha map iteminin gerçek oyuncu envanterine karışması engellendi.
-- 🔁 Captcha, login ve register promptları için ayrı tekrar aç/kapa ayarları eklendi.
-- ⏳ Captcha, login ve register promptları için ayrı interval ayarları eklendi.
-- 🖥️ Console dili için `console-text-mode: native/ascii` ayarı eklendi.
-- 🔎 Config eksik key kontrolü `isSet()` mantığıyla gerçek dosyayı kontrol edecek şekilde düzeltildi.
-- 🧩 Config auto-sync sistemi eklendi.
-- 📝 Yeni config ayarları commentleriyle beraber doğru bölüme yerleşir hale getirildi.
-- 📌 Yanlış yerde duran bilinen config ayarları doğru yere taşınır hale getirildi.
-- 🔵 Config düzeni düzeltildiğinde console’a mavi bilgi logu basılması sağlandı.
-
-### 0.2-sentinel ile Yeni Sürüm Arasındaki Fark
-
-| Alan | 0.2-sentinel | Yeni geliştirme sürümü |
-| --- | --- | --- |
-| Auth güvenliği | Login/register odaklı | Captcha + login/register + opsiyonel 2FA |
-| Captcha | Yok | Map captcha ve alternatif captcha türleri var |
-| 2FA | Yok | TOTP authenticator desteği var |
-| Auth ekranı | Void-zone ve kısıtlamalar | Void-zone, bossbar, gizli envanter, captcha map akışı |
-| Prompt sistemi | Tek interval mantığı | Captcha/login/register için ayrı tekrar ve interval |
-| Config güncelleme | Eksik key ekleme odaklı | Commentli, sıralı, doğru bölüme taşıyan auto-sync |
-| Console Türkçe | `tr/en` dil seçimi | `tr/en` + `native/ascii` text mode |
-| Session | Auto-login var | Auto-login logları ve auth akışıyla daha uyumlu |
-| Yönetim | Status ve admin komutları | Session yönetimi, unlogin, unregister, changepassword akışı daha oturmuş |
-
-### 0.3 Tam Sürümde Hedeflenenler
-
-0.3 final sürümünde amaç, şu an eklenen güvenlik özelliklerini cilalayıp tam yayın kalitesine taşımak.
-
-Planlanan tamamlamalar:
-
-- 🧪 Captcha sisteminin oyun içi testlerle son rötuşlarının yapılması
-- 🗺️ Map captcha görünümünün daha okunur ve daha doğal hale getirilmesi
-- 📱 2FA akışının login/register/session ile tam uyum testlerinin yapılması
-- 📝 Config açıklamalarının son kez baştan sona düzenlenmesi
-- 🌐 `messages_en.yml` ve `messages_tr.yml` dosyalarının tüm yeni özellikleri eksiksiz kapsaması
-- 📰 README ve release açıklamalarının 0.3 final adına göre güncellenmesi
-- 🏷️ 0.3 sürüm numarasının yalnızca final hazır olduğunda verilmesi
-- 🚀 Testlerden sonra `0.3-sentinel` release hazırlığının yapılması
-
-Kısacası 0.2-sentinel temiz ve sağlam temel sürümdü; 0.3 ise captcha, 2FA, bossbar, envanter koruması ve akıllı config sistemiyle daha tam bir güvenlik paketi olacak.
+---
 
 ## 📜 Lisans
 

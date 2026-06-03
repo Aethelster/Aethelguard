@@ -28,6 +28,7 @@ public class AuthListener implements Listener {
             "/giriş",
             "/register",
             "/kayitol",
+            "/kayit",
             "/kayıtol",
             "/captcha",
             "/dogrula",
@@ -35,7 +36,11 @@ public class AuthListener implements Listener {
             "/twofactor",
             "/2fa",
             "/authenticator",
-            "/authy"
+            "/authy",
+            "/recover",
+            "/sifresifirla",
+            "/şifresıfırla",
+            "/kurtar"
     );
 
     private final Aethelguard plugin;
@@ -129,6 +134,9 @@ public class AuthListener implements Listener {
         if (plugin.isCaptchaRequired(player)) {
             return "captcha";
         }
+        if (plugin.isWaitingTwoFactor(player) || plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
+            return "two-factor";
+        }
         return plugin.isAccountRegistered(player.getUniqueId()) ? "login" : "register";
     }
 
@@ -137,6 +145,13 @@ public class AuthListener implements Listener {
             case "captcha" -> plugin.sendCaptchaPrompt(player);
             case "login" -> plugin.sendMessage(player, "messages.login-prompt", true);
             case "register" -> plugin.sendMessage(player, "messages.register-prompt", true);
+            case "two-factor" -> {
+                if (plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
+                    plugin.startTwoFactorLogin(player);
+                } else {
+                    plugin.sendMessage(player, "messages.two-factor-login-required", true);
+                }
+            }
             default -> {
             }
         }
@@ -234,7 +249,16 @@ public class AuthListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerCommand(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (plugin.isAuthenticated(player)) return;
+        if (plugin.isAuthenticated(player)) {
+            if (plugin.isCustomCommandOnCooldown(player, event.getMessage())) {
+                event.setCancelled(true);
+                plugin.sendMessage(player, "messages.security-cooldown-active", true,
+                        java.util.Map.of("time", plugin.formatDuration(plugin.getCustomCommandCooldownRemainingMillis(player, event.getMessage()))));
+                return;
+            }
+            plugin.markCustomCommandCooldown(player, event.getMessage());
+            return;
+        }
 
         String message = event.getMessage().toLowerCase(Locale.ROOT);
 
@@ -261,9 +285,10 @@ public class AuthListener implements Listener {
         String label = parts[0].toLowerCase(Locale.ROOT);
         String commandName = switch (label) {
             case "login", "giris", "giriş" -> "login";
-            case "register", "kayitol", "kayıtol" -> "register";
+            case "register", "kayitol", "kayit", "kayıtol" -> "register";
             case "captcha", "dogrula", "doğrula" -> "captcha";
             case "twofactor", "2fa", "authenticator", "authy" -> "twofactor";
+            case "recover", "sifresifirla", "şifresıfırla", "kurtar" -> "recover";
             default -> null;
         };
 
@@ -273,6 +298,17 @@ public class AuthListener implements Listener {
             event.setCancelled(true);
             plugin.sendMessage(event.getPlayer(), "messages.captcha-required-before-auth", true);
             plugin.sendCaptchaPrompt(event.getPlayer());
+            return;
+        }
+
+        if ((commandName.equals("login") || commandName.equals("register"))
+                && (plugin.isWaitingTwoFactor(event.getPlayer()) || plugin.shouldSkipPasswordLoginForTwoFactor(event.getPlayer()))) {
+            event.setCancelled(true);
+            if (plugin.shouldSkipPasswordLoginForTwoFactor(event.getPlayer())) {
+                plugin.startTwoFactorLogin(event.getPlayer());
+            } else {
+                plugin.sendMessage(event.getPlayer(), "messages.two-factor-login-required", true);
+            }
             return;
         }
 
@@ -289,6 +325,8 @@ public class AuthListener implements Listener {
             new CaptchaCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else if (commandName.equals("twofactor")) {
             new TwoFactorCommand(plugin).onCommand(event.getPlayer(), command, label, args);
+        } else if (commandName.equals("recover")) {
+            new RecoverCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else {
             new AuthCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         }
@@ -303,6 +341,12 @@ public class AuthListener implements Listener {
 
         for (String twoFactorCommand : List.of("/twofactor", "/2fa", "/authenticator", "/authy")) {
             if (message.equals(twoFactorCommand) || message.startsWith(twoFactorCommand + " ")) {
+                return true;
+            }
+        }
+
+        for (String recoverCommand : List.of("/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")) {
+            if (message.equals(recoverCommand) || message.startsWith(recoverCommand + " ")) {
                 return true;
             }
         }

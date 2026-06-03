@@ -24,6 +24,18 @@ commands:
   twofactor:
     description: Manage or verify two-factor authentication.
     aliases: [2fa, authenticator, authy]
+  securityquestion:
+    description: Set or change your account security question.
+    aliases: [securityq, guvenliksorusu, güvenliksorusu]
+  backupcodes:
+    description: Generate account recovery backup codes.
+    aliases: [backupcode, yedekkodlar, kurtarmakodlari]
+  recoverymethod:
+    description: Choose your preferred account recovery method.
+    aliases: [recovery, kurtarmayontemi]
+  recover:
+    description: Recover your account password.
+    aliases: [sifresifirla, şifresıfırla, kurtar]
 permissions:
   aethelguard.admin:
     description: Allows access to Aethelguard admin commands.

@@ -72,6 +72,99 @@ storage:
   # User files are stored under plugins/Aethelguard/<local-users-folder>/
   local-users-folder: "users"
 
+# ───────────────────── [ ADAPTIVE SECURITY SETTINGS ] ───────────
+adaptive-security:
+  # Master switch for risk-based auth decisions.
+  enabled: true
+  trusted-ip-captcha-bypass:
+    # If true, captcha can be skipped for IPs with repeated successful logins
+    # inside the configured time window. Suspicious IP rules always win over this.
+    enabled: true
+    # Time window for successful login counting.
+    window-minutes: 30
+    # Successful auth count required inside the time window before captcha is skipped.
+    required-successful-logins: 3
+  suspicious-ip-extra-captcha:
+    # If true, suspicious IPs receive a stronger/different captcha.
+    enabled: true
+    # Add exact IP addresses here if you want to force extra captcha manually.
+    manual-suspicious-ips: []
+    reasons:
+      # If this IP already registered this many accounts, it becomes suspicious.
+      max-accounts-per-ip: 3
+      # If this player has this many current wrong password attempts, IP becomes suspicious.
+      max-current-wrong-attempts: 2
+    vpn-check:
+      # Checks public IP reputation APIs before captcha starts.
+      # Local/private IPs such as 127.0.0.1 and 192.168.x.x are skipped by default.
+      enabled: true
+      # IPWHOIS can detect vpn/proxy/tor/hosting. IPAPI can detect proxy/hosting.
+      # Keeping both gives better results without requiring an API key.
+      providers: ["IPWHOIS", "IPAPI"]
+      # How many providers must flag the IP before it is treated as suspicious.
+      # 1 is stricter, 2 is safer against false positives.
+      min-detections: 1
+      # Maximum wait per provider. Keep this low so login is not delayed for long.
+      timeout-ms: 2500
+      # Successful API results are cached so the same IP is not checked every join.
+      cache-minutes: 360
+      # true: if every provider fails, allow normal auth. false: treat failed checks as suspicious.
+      fail-open: true
+      # Usually false. Enable only if you test VPN checks on LAN/proxy-like private addresses.
+      check-private-ips: false
+      # Logs clean/suspicious provider results to console for debugging.
+      log-results: true
+    # RANDOM_EXCEPT_NORMAL: picks a random type except the normal captcha type when possible.
+    # RANDOM_FROM_LIST: picks randomly from the types list below.
+    # FIXED: always uses fixed-type.
+    captcha-mode: "RANDOM_EXCEPT_NORMAL"
+    fixed-type: "MATH"
+    types: ["TEXT", "NUMERIC", "ALPHANUMERIC", "MATH"]
+
+# ───────────────────── [ ACCOUNT RECOVERY SETTINGS ] ────────────
+recovery:
+  # Enables password recovery through security questions or backup codes.
+  enabled: true
+  # If true, players who reach wrong-password max-attempts are shown recovery help
+  # before being kicked. If false, normal kick behavior is used.
+  offer-before-kick: true
+  security-questions:
+    # Enables /securityquestion setup/change and question-based /recover.
+    # Question texts are loaded from security_questions_<default-language>.yml.
+    enabled: true
+  backup-codes:
+    # Enables /backupcodes generate and backup-code based /recover.
+    enabled: true
+    # How many one-time backup codes are created with /backupcodes generate.
+    count: 6
+    # Backup code length. Minimum is 6.
+    length: 10
+
+# ───────────────────── [ SECURITY COOLDOWN SETTINGS ] ───────────
+security-cooldowns:
+  # Prevents sensitive account security commands from being changed too often.
+  enabled: true
+  commands:
+    # Player password change cooldown.
+    changepassword-hours: 72
+    # 2FA setup cooldown.
+    two-factor-setup-hours: 24
+    # 2FA disable cooldown.
+    two-factor-disable-hours: 72
+    # Security question setup/change cooldown.
+    security-question-change-hours: 72
+    # Recovery method change cooldown.
+    recovery-method-change-hours: 72
+    # Backup code regeneration cooldown.
+    backup-code-generate-hours: 24
+    # Password recovery cooldown.
+    recover-hours: 24
+  custom:
+    # Admins can add extra player commands here. These use the single hours value below.
+    enabled: true
+    hours: 24
+    commands: []
+
 # ───────────────────── [ AUTH CORE SETTINGS ] ───────────────────
 auth-settings:
   # Sends unauthenticated players to the void-zone until they login/register.
@@ -92,6 +185,62 @@ auth-settings:
       max-accounts: 2
       # Players with this permission can register even when their IP reached the limit.
       bypass-permission: "aethelguard.bypass.iplimit"
+
+  password-policy:
+    # Shared password rules for /register, player /changepassword, /recover,
+    # and admin /aethelguard changepassword.
+    # Keep enabled true if you want consistent account safety across every password flow.
+    enabled: true
+    # Minimum password length. Default is intentionally modest for compatibility.
+    min-length: 4
+    # Maximum password length. Helps prevent extremely large input from being hashed.
+    max-length: 64
+    # If true, passwords must contain at least one letter.
+    require-letter: false
+    # If true, passwords must contain at least one number.
+    require-number: false
+    # If true, the player's username cannot appear inside the password.
+    block-username: true
+    # If false, passwords cannot contain Turkish-specific characters:
+    # ç, ğ, ı, ö, ş, ü and their uppercase variants.
+    # Keep true if your player base commonly uses Turkish keyboards.
+    allow-turkish-characters: true
+    # If false, punctuation characters such as ! ? . , _ - @ # are not allowed.
+    # Default true because punctuation makes stronger passwords easier to create.
+    allow-punctuation: true
+    # If true, passwords may contain emoji, special font symbols, and other
+    # non-standard characters outside normal letters, numbers, and punctuation.
+    # Default false for compatibility with consoles, databases, and support workflows.
+    allow-non-alphabet-symbols: false
+    # Words or fragments that cannot appear inside passwords.
+    # This is checked case-insensitively and Turkish letters are normalized for matching,
+    # so "şifre" and "sifre" are treated similarly.
+    # You can remove, add, or fully replace this list for your community.
+    blocked-words:
+      - "admin"
+      - "password"
+      - "sifre"
+      - "şifre"
+      - "123456"
+      - "qwerty"
+      - "fuck"
+      - "shit"
+      - "bitch"
+      - "asshole"
+      - "bastard"
+      - "dick"
+      - "pussy"
+      - "cunt"
+      - "orospu"
+      - "amk"
+      - "aq"
+      - "siktir"
+      - "sik"
+      - "pic"
+      - "piç"
+      - "yarrak"
+      - "göt"
+      - "got"
 
   captcha:
     # Requires players to solve a captcha before /login or /register can be used.
@@ -197,6 +346,11 @@ auth-settings:
     register-repeat-enabled: true
     # Register reminder delay. 200 ticks = 10 seconds.
     register-interval-ticks: 200
+    # Two-factor reminder repeat switch.
+    # false: the /2fa message is sent once when the player enters two-factor state.
+    two-factor-repeat-enabled: true
+    # Two-factor reminder delay. 200 ticks = 10 seconds.
+    two-factor-interval-ticks: 200
 
   bossbar:
     # Shows a bossbar with the command the player must use while waiting for auth.
@@ -240,6 +394,7 @@ auth-settings:
       - "/giriş"
       - "/register"
       - "/kayitol"
+      - "/kayit"
       - "/captcha"
       - "/dogrula"
       - "/doğrula"
@@ -248,6 +403,10 @@ auth-settings:
       - "/authenticator"
       - "/authy"
       - "/kayıtol"
+      - "/recover"
+      - "/sifresifirla"
+      - "/şifresıfırla"
+      - "/kurtar"
 
   # ─────────────────── [ WRONG PASSWORD SETTINGS ] ──────────────
   wrong-password:

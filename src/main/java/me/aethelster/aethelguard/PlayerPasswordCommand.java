@@ -40,8 +40,21 @@ public class PlayerPasswordCommand implements CommandExecutor {
             return true;
         }
 
+        long remaining = plugin.getSecurityCooldownRemainingMillis(player, "changepassword");
+        if (remaining > 0L) {
+            plugin.sendMessage(player, "messages.security-cooldown-active", true,
+                    java.util.Map.of("time", plugin.formatDuration(remaining)));
+            return true;
+        }
+
         if (!args[1].equals(args[2])) {
             plugin.sendMessage(player, "messages.passwords-dont-match", true);
+            return true;
+        }
+
+        Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[1], player.getName());
+        if (!passwordPolicy.valid()) {
+            plugin.sendMessage(player, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
             return true;
         }
 
@@ -63,6 +76,7 @@ public class PlayerPasswordCommand implements CommandExecutor {
 
             String newHash = BCrypt.hashpw(args[1], BCrypt.gensalt());
             if (updatePassword(player, newHash)) {
+                plugin.markSecurityCooldown(player, "changepassword");
                 plugin.getServer().getScheduler().runTask(plugin, () ->
                         plugin.sendMessage(player, "messages.change-password-success", true)
                 );

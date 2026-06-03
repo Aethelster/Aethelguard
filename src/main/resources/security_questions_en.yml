@@ -1,0 +1,14 @@
+# ============================================================
+#              AETHELGUARD SECURITY QUESTIONS
+# ============================================================
+# You can add as many questions as you want.
+# If default-language is "EN", this file is used.
+# Every key must be unique.
+# ============================================================
+
+questions:
+  favorite-color: "What is your favorite color?"
+  favorite-number: "What is your favorite number?"
+  favorite-character: "Who is your favorite movie or game character?"
+  first-pet: "What was the name of your first pet?"
+  favorite-food: "What is your favorite food?"
