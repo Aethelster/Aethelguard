@@ -1,0 +1,18 @@
+Changes from 0.3.7-dev to 0.3.8-dev
+
+Warning:
+- This development build has not been tested in-game yet. Please test it on a backup/test server before using it on a live server.
+
+- Polished PIN GUI theme preview commands.
+- /aethelguard pingui preview can now be used without a theme name.
+- When no preview theme is provided, Aethelguard opens the currently configured PIN GUI theme.
+- Added /aethelguard pingui themes to list all available PIN GUI themes and the current configured theme.
+- /aethelguard pingui themes can be used from console.
+- /aethelguard pingui preview still requires an in-game player because it opens an inventory GUI.
+- Improved admin command tab completion.
+- /aethelguard pingui now suggests preview and themes.
+- /aethelguard pingui preview now suggests every available PIN GUI theme.
+- Player-target admin commands now suggest known registered account names in addition to online player names.
+- IP/account lookup commands now suggest known account names, known account IP addresses, and online player names.
+- Added helper methods to read known account names and IP addresses from local YAML storage or MySQL storage.
+- Updated English and Turkish admin usage/messages for the improved PIN GUI preview flow.

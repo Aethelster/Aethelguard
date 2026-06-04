@@ -18,14 +18,14 @@ Amaç basit: **auth güçlü olsun, console temiz kalsın, admin her şeyi confi
 
 GitHub Releases kısmında **Latest / stable** olarak tutulması gereken sürüm budur. Normal sunucu sahipleri, canlı sunucularında bu sürümü kullanmalıdır. `v0.3-sentinel`; Adaptive Security + Recovery Update’in tamamlanmış, ana yayın olarak paylaşılmış sürümüdür.
 
-`v0.3.1-dev`, `v0.3.2-dev`, `v0.3.3-dev`, `v0.3.4-dev`, `v0.3.5-dev` ve bundan sonra gelecek `dev` etiketli sürümler ise **pre-release / test build** olarak düşünülmelidir. 🧪
+`v0.3.1-dev` ile başlayan ve `v0.4-dev` test build’ine kadar devam eden `dev` etiketli sürümler ise **pre-release / test build** olarak düşünülmelidir. 🧪
 
-Bu dev sürümler yeni özellikleri erkenden denemek isteyen adminler içindir. İçlerinde PIN sistemi, PIN GUI polish, diagnostics, reload backup gibi yeni özellikler bulunabilir; fakat bu sürümler canlı sunucuya koymadan önce mutlaka yedek/test sunucusunda denenmelidir.
+Bu dev sürümler yeni özellikleri erkenden denemek isteyen adminler içindir. İçlerinde PIN sistemi, PIN GUI polish, diagnostics, reload backup, temporary lockout, gelişmiş status çıktısı ve tab completion polish gibi yeni özellikler bulunabilir; fakat bu sürümler canlı sunucuya koymadan önce mutlaka yedek/test sunucusunda denenmelidir.
 
 Kısa özet:
 
 - ✅ **Canlı sunucu için:** `v0.3-sentinel`
-- 🧪 **Yeni özellikleri erken test etmek için:** `v0.3.x-dev`
+- 🧪 **Yeni özellikleri erken test etmek için:** `v0.3.x-dev` ve `v0.4-dev`
 - 🚧 **Final ücretsiz yol haritası:** `v0.4-sentinel`
 
 ---
