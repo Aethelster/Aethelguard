@@ -112,6 +112,7 @@ buildNumber.properties
 
 # Common working directory
 run/
+.tools/
 
 # Temporary jar restore workspace
 .restore-jars/
