@@ -29,6 +29,9 @@ public class AuthListener implements Listener {
             "/register",
             "/kayitol",
             "/kayit",
+            "/pin",
+            "/setpin",
+            "/pinayarla",
             "/kayıtol",
             "/captcha",
             "/dogrula",
@@ -137,7 +140,10 @@ public class AuthListener implements Listener {
         if (plugin.isWaitingTwoFactor(player) || plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
             return "two-factor";
         }
-        return plugin.isAccountRegistered(player.getUniqueId()) ? "login" : "register";
+        if (plugin.isAccountRegistered(player.getUniqueId())) {
+            return plugin.getAuthMode(player.getUniqueId()).equals("PIN") ? "pin" : "login";
+        }
+        return plugin.defaultAuthMode().equals("PIN") ? "setpin" : "register";
     }
 
     private void sendPromptForState(Player player, String state) {
@@ -145,6 +151,8 @@ public class AuthListener implements Listener {
             case "captcha" -> plugin.sendCaptchaPrompt(player);
             case "login" -> plugin.sendMessage(player, "messages.login-prompt", true);
             case "register" -> plugin.sendMessage(player, "messages.register-prompt", true);
+            case "pin" -> plugin.sendMessage(player, "messages.pin-prompt", true);
+            case "setpin" -> plugin.sendMessage(player, "messages.setpin-prompt", true);
             case "two-factor" -> {
                 if (plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
                     plugin.startTwoFactorLogin(player);
@@ -173,6 +181,7 @@ public class AuthListener implements Listener {
         if (!plugin.getConfig().getBoolean("auth-settings.timeout.enabled", true)) return;
 
         long timeoutTicks = plugin.getConfig().getLong("auth-settings.timeout.ticks", 1200L);
+        plugin.markAuthTimeout(player, timeoutTicks);
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || plugin.isAuthenticated(player)) return;
 
@@ -222,6 +231,8 @@ public class AuthListener implements Listener {
         plugin.getUnauthenticatedPlayers().remove(uuid);
         plugin.getPreviousLocations().remove(uuid);
         plugin.getWrongPasswordAttempts().remove(uuid);
+        plugin.getWrongPinAttempts().remove(uuid);
+        plugin.clearAuthTimeout(uuid);
         plugin.clearCaptchaState(uuid);
         plugin.clearTwoFactorState(uuid);
         plugin.hideAuthBossBar(player);
@@ -286,6 +297,8 @@ public class AuthListener implements Listener {
         String commandName = switch (label) {
             case "login", "giris", "giriş" -> "login";
             case "register", "kayitol", "kayit", "kayıtol" -> "register";
+            case "pin" -> "pin";
+            case "setpin", "pinayarla" -> "setpin";
             case "captcha", "dogrula", "doğrula" -> "captcha";
             case "twofactor", "2fa", "authenticator", "authy" -> "twofactor";
             case "recover", "sifresifirla", "şifresıfırla", "kurtar" -> "recover";
@@ -294,14 +307,14 @@ public class AuthListener implements Listener {
 
         if (commandName == null) return;
 
-        if ((commandName.equals("login") || commandName.equals("register")) && plugin.isCaptchaRequired(event.getPlayer())) {
+        if (List.of("login", "register", "pin", "setpin").contains(commandName) && plugin.isCaptchaRequired(event.getPlayer())) {
             event.setCancelled(true);
             plugin.sendMessage(event.getPlayer(), "messages.captcha-required-before-auth", true);
             plugin.sendCaptchaPrompt(event.getPlayer());
             return;
         }
 
-        if ((commandName.equals("login") || commandName.equals("register"))
+        if (List.of("login", "register", "pin", "setpin").contains(commandName)
                 && (plugin.isWaitingTwoFactor(event.getPlayer()) || plugin.shouldSkipPasswordLoginForTwoFactor(event.getPlayer()))) {
             event.setCancelled(true);
             if (plugin.shouldSkipPasswordLoginForTwoFactor(event.getPlayer())) {
@@ -327,6 +340,8 @@ public class AuthListener implements Listener {
             new TwoFactorCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else if (commandName.equals("recover")) {
             new RecoverCommand(plugin).onCommand(event.getPlayer(), command, label, args);
+        } else if (commandName.equals("pin") || commandName.equals("setpin")) {
+            new PinCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else {
             new AuthCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         }
@@ -347,6 +362,12 @@ public class AuthListener implements Listener {
 
         for (String recoverCommand : List.of("/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")) {
             if (message.equals(recoverCommand) || message.startsWith(recoverCommand + " ")) {
+                return true;
+            }
+        }
+
+        for (String pinCommand : List.of("/pin", "/setpin", "/pinayarla")) {
+            if (message.equals(pinCommand) || message.startsWith(pinCommand + " ")) {
                 return true;
             }
         }

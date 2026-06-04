@@ -242,6 +242,73 @@ auth-settings:
       - "göt"
       - "got"
 
+  pin:
+    # Enables the PIN authentication system.
+    # PIN can be used as a lighter alternative to password login.
+    # The future PIN GUI/keypad will use the same settings below.
+    enabled: false
+    # Default auth mode for new accounts.
+    # PASSWORD: new players use /register <password> <password>.
+    # PIN: new players use /setpin <pin> <pin>.
+    # Existing accounts keep their own auth-mode unless players/admins change it.
+    default-auth-mode: "PASSWORD"
+    # If true, authenticated players can switch with /authmode password or /authmode pin.
+    # Players must create a PIN first before switching to PIN mode.
+    allow-player-auth-mode-change: true
+    # Minimum PIN length.
+    min-length: 4
+    # Maximum PIN length.
+    max-length: 8
+    # true: PINs may contain only numbers. Recommended for GUI keypad support.
+    numeric-only: true
+    # false blocks PINs like 0000, 1111, 7777.
+    allow-repeated-digits: false
+    # false blocks PINs like 1234, 2345, 9876.
+    allow-sequential-digits: false
+    # Blocks very common PINs listed below.
+    block-common-pins: true
+    common-pins:
+      - "0000"
+      - "1111"
+      - "1234"
+      - "123456"
+      - "1212"
+      - "7777"
+      - "2580"
+      - "0852"
+    wrong-pin:
+      # Failed /pin attempts before PIN punishment.
+      # This counter is separate from password and captcha attempts.
+      max-attempts: 3
+      # true: kick after wrong-pin max-attempts.
+      kick-enabled: true
+    gui:
+      # Enables the clickable PIN keypad GUI for PIN login and PIN registration.
+      # If this is false, players can still use /pin and /setpin normally.
+      enabled: false
+      # Visual button theme used by the keypad.
+      # forest-green: deep green number heads with matching green action buttons.
+      # quartz: bright/white quartz-style number heads with matching light action buttons.
+      # pumpkin: orange pumpkin-style number heads with matching orange action buttons.
+      # netherite: dark netherite number heads. This theme has numbers only, so special buttons are forced on.
+      # monitor-green: green digital monitor-style numbers with the shared special buttons.
+      # monitor-red: red digital monitor-style numbers with the shared special buttons.
+      theme: "quartz"
+      # Uses the shared special action buttons for confirm, delete, clear, and exit.
+      # When false, forest-green and quartz use their own matching action buttons.
+      # Netherite always needs this because it does not include action buttons.
+      use-special-buttons: false
+      # true: entered PIN digits are shown as the theme's secret head.
+      # false: entered PIN digits are shown as actual numbers.
+      # This is an admin-side privacy choice for the free version.
+      hide-input: true
+      # If true, the keypad numbers are shuffled every time the GUI opens.
+      # Default false keeps the layout predictable for players.
+      randomize-numbers: false
+      # How many PIN digits the GUI accepts. The free keypad layout has four display slots.
+      # Keep this at 4 unless you also allow longer PINs through commands.
+      max-digits: 4
+
   captcha:
     # Requires players to solve a captcha before /login or /register can be used.
     enabled: true
@@ -346,6 +413,16 @@ auth-settings:
     register-repeat-enabled: true
     # Register reminder delay. 200 ticks = 10 seconds.
     register-interval-ticks: 200
+    # PIN login reminder repeat switch.
+    # false: the /pin message is sent once when the player enters PIN state.
+    pin-repeat-enabled: true
+    # PIN login reminder delay. 200 ticks = 10 seconds.
+    pin-interval-ticks: 200
+    # PIN register reminder repeat switch.
+    # false: the /setpin message is sent once when a new player must create a PIN.
+    setpin-repeat-enabled: true
+    # PIN register reminder delay. 200 ticks = 10 seconds.
+    setpin-interval-ticks: 200
     # Two-factor reminder repeat switch.
     # false: the /2fa message is sent once when the player enters two-factor state.
     two-factor-repeat-enabled: true
@@ -395,6 +472,9 @@ auth-settings:
       - "/register"
       - "/kayitol"
       - "/kayit"
+      - "/pin"
+      - "/setpin"
+      - "/pinayarla"
       - "/captcha"
       - "/dogrula"
       - "/doğrula"
@@ -447,3 +527,57 @@ auth-settings:
       pitch: 1.0
       repeat-times: 1
       repeat-interval-ticks: 4
+    pin-gui-click:
+      enabled: true
+      sound: "ui.button.click"
+      volume: 0.6
+      pitch: 1.2
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    pin-gui-confirm:
+      enabled: true
+      sound: "entity.experience_orb.pickup"
+      volume: 0.8
+      pitch: 1.4
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    # Played when the PIN keypad opens.
+    pin-gui-open:
+      enabled: true
+      sound: "block.note_block.pling"
+      volume: 0.5
+      pitch: 1.4
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    # Played when the PIN keypad closes through the exit button or preview close.
+    pin-gui-close:
+      enabled: true
+      sound: "block.chest.close"
+      volume: 0.5
+      pitch: 1.0
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    # Played after an incorrect PIN attempt inside the GUI.
+    pin-gui-wrong:
+      enabled: true
+      sound: "entity.villager.no"
+      volume: 1.0
+      pitch: 0.9
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    # Played when the confirm button is clicked before enough digits are entered.
+    pin-gui-disabled-confirm:
+      enabled: true
+      sound: "entity.villager.no"
+      volume: 0.8
+      pitch: 0.7
+      repeat-times: 1
+      repeat-interval-ticks: 1
+    # Played only when a PIN GUI login/register succeeds.
+    pin-gui-success:
+      enabled: true
+      sound: "entity.villager.trade"
+      volume: 1.0
+      pitch: 1.1
+      repeat-times: 1
+      repeat-interval-ticks: 1

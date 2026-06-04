@@ -126,6 +126,7 @@ public class PlayerPasswordCommand implements CommandExecutor {
 
             FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
             config.set("password", hash);
+            config.set("password.usable", true);
             config.set("security.last-password-change", java.time.LocalDateTime.now().toString());
             try {
                 config.save(userFile);
@@ -137,7 +138,7 @@ public class PlayerPasswordCommand implements CommandExecutor {
 
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
             if (conn == null) return false;
-            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + plugin.getAuthTableName() + " SET password = ? WHERE uuid = ?;")) {
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + plugin.getAuthTableName() + " SET password = ?, password_usable = TRUE WHERE uuid = ?;")) {
                 ps.setString(1, hash);
                 ps.setString(2, uuid);
                 return ps.executeUpdate() > 0;

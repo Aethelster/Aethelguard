@@ -62,6 +62,7 @@ public final class Aethelguard extends JavaPlugin {
     private final Map<UUID, Location> previousLocations = new HashMap<>();
     private final Set<UUID> unauthenticatedPlayers = new HashSet<>();
     private final Map<UUID, Integer> wrongPasswordAttempts = new HashMap<>();
+    private final Map<UUID, Integer> wrongPinAttempts = new HashMap<>();
     private final Set<UUID> loggedInPlayers = new HashSet<>();
     private final Map<UUID, AuthSession> authSessions = new HashMap<>();
     private final Map<UUID, CaptchaChallenge> captchaChallenges = new HashMap<>();
@@ -72,6 +73,7 @@ public final class Aethelguard extends JavaPlugin {
     private final Map<UUID, SecurityQuestion> pendingSecurityQuestions = new HashMap<>();
     private final Map<UUID, AuthInventorySnapshot> authInventories = new HashMap<>();
     private final Map<UUID, BossBar> authBossBars = new HashMap<>();
+    private final Map<UUID, Long> authTimeoutDeadlines = new HashMap<>();
     private final Map<UUID, Boolean> extraCaptchaPlayers = new HashMap<>();
     private final Map<String, Deque<Long>> ipSuccessLogins = new HashMap<>();
     private final Map<String, VpnCheckResult> vpnCheckCache = new HashMap<>();
@@ -104,6 +106,7 @@ public final class Aethelguard extends JavaPlugin {
 
     private FileConfiguration langConfig = null;
     private File langFile = null;
+    private PinGui pinGui;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final String consolePrefix = "§b[Aethelguard] §r";
 
@@ -361,8 +364,13 @@ public final class Aethelguard extends JavaPlugin {
         if (isWaitingTwoFactor(player)) {
             return "messages.bossbar-two-factor";
         }
-        return isAccountRegistered(player.getUniqueId())
-                ? "messages.bossbar-login"
+        if (isAccountRegistered(player.getUniqueId())) {
+            return getAuthMode(player.getUniqueId()).equals("PIN")
+                    ? "messages.bossbar-pin"
+                    : "messages.bossbar-login";
+        }
+        return defaultAuthMode().equals("PIN")
+                ? "messages.bossbar-setpin"
                 : "messages.bossbar-register";
     }
 
@@ -385,6 +393,8 @@ public final class Aethelguard extends JavaPlugin {
     public void completeLogin(Player player,  boolean sendMessage) {
         unauthenticatedPlayers.remove(player.getUniqueId());
         loggedInPlayers.add(player.getUniqueId());
+        wrongPinAttempts.remove(player.getUniqueId());
+        clearAuthTimeout(player.getUniqueId());
         recordAdaptiveSuccessfulAuth(player);
         clearCaptchaState(player.getUniqueId());
         clearTwoFactorState(player.getUniqueId());
@@ -527,20 +537,33 @@ public final class Aethelguard extends JavaPlugin {
 
         AuthCommand authCommand = new AuthCommand(this);
         AdminCommand adminCommand = new AdminCommand(this);
+        PinCommand pinCommand = new PinCommand(this);
+        pinGui = new PinGui(this, pinCommand);
 
         getCommand("register").setExecutor(authCommand);
         getCommand("login").setExecutor(authCommand);
+        getCommand("pin").setExecutor(pinCommand);
+        getCommand("setpin").setExecutor(pinCommand);
+        getCommand("changepin").setExecutor(pinCommand);
+        getCommand("authmode").setExecutor(pinCommand);
+        getCommand("authmode").setTabCompleter(CommandCompletions.firstArgument(List.of("status", "password", "pin")));
         getCommand("changepassword").setExecutor(new PlayerPasswordCommand(this));
         getCommand("captcha").setExecutor(new CaptchaCommand(this));
         getCommand("twofactor").setExecutor(new TwoFactorCommand(this));
+        getCommand("twofactor").setTabCompleter(CommandCompletions.firstArgument(List.of("status", "setup", "confirm", "disable")));
         getCommand("securityquestion").setExecutor(new SecurityQuestionCommand(this));
+        getCommand("securityquestion").setTabCompleter(CommandCompletions.firstArgument(List.of("status", "setup", "change", "answer")));
         getCommand("backupcodes").setExecutor(new BackupCodesCommand(this));
+        getCommand("backupcodes").setTabCompleter(CommandCompletions.firstArgument(List.of("generate")));
         getCommand("recoverymethod").setExecutor(new RecoveryMethodCommand(this));
+        getCommand("recoverymethod").setTabCompleter(CommandCompletions.firstArgument(List.of("status", "question", "backup-code")));
         getCommand("recover").setExecutor(new RecoverCommand(this));
+        getCommand("recover").setTabCompleter(CommandCompletions.firstArgument(List.of("question", "code", "backup-code")));
         getCommand("aethelguard").setExecutor(adminCommand);
         getCommand("aethelguard").setTabCompleter(adminCommand);
         getServer().getPluginManager().registerEvents(new AuthListener(this), this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
+        getServer().getPluginManager().registerEvents(pinGui, this);
 
         logInfo("Aethelguard başarıyla aktif edildi.", "Aethelguard successfully enabled.");
     }
@@ -676,6 +699,24 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.password-policy.allow-punctuation", true),
                 Map.entry("auth-settings.password-policy.allow-non-alphabet-symbols", false),
                 Map.entry("auth-settings.password-policy.blocked-words", List.of("admin", "password", "sifre", "şifre", "123456", "qwerty", "fuck", "shit", "bitch", "asshole", "bastard", "dick", "pussy", "cunt", "orospu", "amk", "aq", "siktir", "sik", "pic", "piç", "yarrak", "göt", "got")),
+                Map.entry("auth-settings.pin.enabled", false),
+                Map.entry("auth-settings.pin.default-auth-mode", "PASSWORD"),
+                Map.entry("auth-settings.pin.allow-player-auth-mode-change", true),
+                Map.entry("auth-settings.pin.min-length", 4),
+                Map.entry("auth-settings.pin.max-length", 8),
+                Map.entry("auth-settings.pin.numeric-only", true),
+                Map.entry("auth-settings.pin.allow-repeated-digits", false),
+                Map.entry("auth-settings.pin.allow-sequential-digits", false),
+                Map.entry("auth-settings.pin.block-common-pins", true),
+                Map.entry("auth-settings.pin.common-pins", List.of("0000", "1111", "1234", "123456", "1212", "7777", "2580", "0852")),
+                Map.entry("auth-settings.pin.wrong-pin.max-attempts", 3),
+                Map.entry("auth-settings.pin.wrong-pin.kick-enabled", true),
+                Map.entry("auth-settings.pin.gui.enabled", false),
+                Map.entry("auth-settings.pin.gui.theme", "quartz"),
+                Map.entry("auth-settings.pin.gui.use-special-buttons", false),
+                Map.entry("auth-settings.pin.gui.hide-input", true),
+                Map.entry("auth-settings.pin.gui.randomize-numbers", false),
+                Map.entry("auth-settings.pin.gui.max-digits", 4),
                 Map.entry("adaptive-security.enabled", true),
                 Map.entry("adaptive-security.trusted-ip-captcha-bypass.enabled", true),
                 Map.entry("adaptive-security.trusted-ip-captcha-bypass.window-minutes", 30),
@@ -751,6 +792,10 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.prompts.login-interval-ticks", 200),
                 Map.entry("auth-settings.prompts.register-repeat-enabled", true),
                 Map.entry("auth-settings.prompts.register-interval-ticks", 200),
+                Map.entry("auth-settings.prompts.pin-repeat-enabled", true),
+                Map.entry("auth-settings.prompts.pin-interval-ticks", 200),
+                Map.entry("auth-settings.prompts.setpin-repeat-enabled", true),
+                Map.entry("auth-settings.prompts.setpin-interval-ticks", 200),
                 Map.entry("auth-settings.prompts.two-factor-repeat-enabled", true),
                 Map.entry("auth-settings.prompts.two-factor-interval-ticks", 200),
                 Map.entry("auth-settings.bossbar.enabled", true),
@@ -766,7 +811,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.restrictions.prevent-block-place", true),
                 Map.entry("auth-settings.restrictions.prevent-chat", true),
                 Map.entry("auth-settings.restrictions.hide-chat-from-unauthenticated", true),
-                Map.entry("auth-settings.commands.allowed", List.of("/login", "/giris", "/giriş", "/register", "/kayitol", "/kayit", "/kayıtol", "/captcha", "/dogrula", "/doğrula", "/twofactor", "/2fa", "/authenticator", "/authy", "/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")),
+                Map.entry("auth-settings.commands.allowed", List.of("/login", "/giris", "/giriş", "/register", "/kayitol", "/kayit", "/kayıtol", "/pin", "/setpin", "/pinayarla", "/captcha", "/dogrula", "/doğrula", "/twofactor", "/2fa", "/authenticator", "/authy", "/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")),
                 Map.entry("auth-settings.wrong-password.max-attempts", 3),
                 Map.entry("auth-settings.wrong-password.kick-enabled", true),
                 Map.entry("auth-settings.sounds.enabled", true),
@@ -788,6 +833,48 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.sounds.wrong-password.pitch", 1.0),
                 Map.entry("auth-settings.sounds.wrong-password.repeat-times", 1),
                 Map.entry("auth-settings.sounds.wrong-password.repeat-interval-ticks", 4),
+                Map.entry("auth-settings.sounds.pin-gui-click.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-click.sound", "ui.button.click"),
+                Map.entry("auth-settings.sounds.pin-gui-click.volume", 0.6),
+                Map.entry("auth-settings.sounds.pin-gui-click.pitch", 1.2),
+                Map.entry("auth-settings.sounds.pin-gui-click.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-click.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.sound", "entity.experience_orb.pickup"),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.volume", 0.8),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.pitch", 1.4),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-confirm.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-open.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-open.sound", "block.note_block.pling"),
+                Map.entry("auth-settings.sounds.pin-gui-open.volume", 0.5),
+                Map.entry("auth-settings.sounds.pin-gui-open.pitch", 1.4),
+                Map.entry("auth-settings.sounds.pin-gui-open.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-open.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-close.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-close.sound", "block.chest.close"),
+                Map.entry("auth-settings.sounds.pin-gui-close.volume", 0.5),
+                Map.entry("auth-settings.sounds.pin-gui-close.pitch", 1.0),
+                Map.entry("auth-settings.sounds.pin-gui-close.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-close.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.sound", "entity.villager.no"),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.volume", 1.0),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.pitch", 0.9),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-wrong.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.sound", "entity.villager.no"),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.volume", 0.8),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.pitch", 0.7),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.repeat-interval-ticks", 1),
+                Map.entry("auth-settings.sounds.pin-gui-success.enabled", true),
+                Map.entry("auth-settings.sounds.pin-gui-success.sound", "entity.villager.trade"),
+                Map.entry("auth-settings.sounds.pin-gui-success.volume", 1.0),
+                Map.entry("auth-settings.sounds.pin-gui-success.pitch", 1.1),
+                Map.entry("auth-settings.sounds.pin-gui-success.repeat-times", 1),
+                Map.entry("auth-settings.sounds.pin-gui-success.repeat-interval-ticks", 1),
                 Map.entry("console-logging.suppress-server-connection-logs", true),
                 Map.entry("console-logging.log-auth-success", true),
                 Map.entry("console-logging.log-auth-state-changes", true),
@@ -812,6 +899,10 @@ public final class Aethelguard extends JavaPlugin {
             getConfig().set("local-logging", null);
             changed = true;
         }
+        if (getConfig().isSet("auth-settings.pin.gui.filler-material")) {
+            getConfig().set("auth-settings.pin.gui.filler-material", null);
+            changed = true;
+        }
 
         List<String> allowedCommands = new ArrayList<>(getConfig().getStringList("auth-settings.commands.allowed"));
         if (!allowedCommands.contains("/giriş")) {
@@ -826,8 +917,26 @@ public final class Aethelguard extends JavaPlugin {
             allowedCommands.add("/kayit");
             changed = true;
         }
+        for (String command : List.of("/pin", "/setpin", "/pinayarla")) {
+            if (!allowedCommands.contains(command)) {
+                allowedCommands.add(command);
+                changed = true;
+            }
+        }
         if (changed) {
             getConfig().set("auth-settings.commands.allowed", allowedCommands);
+        }
+
+        String pinGuiTheme = getConfig().getString("auth-settings.pin.gui.theme", "quartz");
+        if (pinGuiTheme != null
+                && pinGuiTheme.equalsIgnoreCase("netherite")
+                && !getConfig().getBoolean("auth-settings.pin.gui.use-special-buttons", false)) {
+            getConfig().set("auth-settings.pin.gui.use-special-buttons", true);
+            logWarning(
+                    "Netherite PIN GUI temasinda special tuslar zorunludur. use-special-buttons otomatik true yapildi.",
+                    "Special buttons are required for the netherite PIN GUI theme. use-special-buttons was forced to true."
+            );
+            changed = true;
         }
 
         if (changed) {
@@ -1786,6 +1895,62 @@ public final class Aethelguard extends JavaPlugin {
         return 0;
     }
 
+    public List<AccountIpEntry> getAccountsByIp(String ipAddress) {
+        if (ipAddress == null || ipAddress.isBlank() || ipAddress.equalsIgnoreCase("UNKNOWN")) return List.of();
+
+        if (!getConfig().getBoolean("database.enabled", false)) {
+            File[] files = getLocalUsersFolder().listFiles((dir, name) -> name.endsWith(".yml"));
+            if (files == null) return List.of();
+
+            List<AccountIpEntry> accounts = new ArrayList<>();
+            for (File file : files) {
+                FileConfiguration config = YamlConfiguration.loadConfiguration(file);
+                String registrationIp = config.getString("registration-ip", config.getString("last-ip", ""));
+                String lastIp = config.getString("last-ip", "");
+                if (!ipAddress.equals(registrationIp) && !ipAddress.equals(lastIp)) {
+                    continue;
+                }
+
+                accounts.add(new AccountIpEntry(
+                        config.getString("username", file.getName().replace(".yml", "")),
+                        config.getString("uuid", file.getName().replace(".yml", "")),
+                        stringOrDash(registrationIp),
+                        stringOrDash(lastIp),
+                        config.getString("created-at", "-"),
+                        config.getString("last-login", "-")
+                ));
+            }
+            return accounts;
+        }
+
+        try (java.sql.Connection conn = getDatabaseManager().getConnection()) {
+            if (conn == null) return List.of();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT uuid, username, registration_ip, last_ip, created_at, last_login " +
+                            "FROM " + getAuthTableName() + " WHERE registration_ip = ? OR last_ip = ? ORDER BY username;"
+            )) {
+                ps.setString(1, ipAddress);
+                ps.setString(2, ipAddress);
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<AccountIpEntry> accounts = new ArrayList<>();
+                    while (rs.next()) {
+                        accounts.add(new AccountIpEntry(
+                                rs.getString("username"),
+                                rs.getString("uuid"),
+                                stringOrDash(rs.getString("registration_ip")),
+                                stringOrDash(rs.getString("last_ip")),
+                                stringOrDash(rs.getString("created_at")),
+                                stringOrDash(rs.getString("last_login"))
+                        ));
+                    }
+                    return accounts;
+                }
+            }
+        } catch (SQLException ignored) {
+        }
+        return List.of();
+    }
+
     public void startCaptcha(Player player) {
         if (!ensureVpnCheckReady(player)) {
             sendMessage(player, "messages.vpn-check-wait", true);
@@ -1920,15 +2085,22 @@ public final class Aethelguard extends JavaPlugin {
         if (shouldSkipPasswordLoginForTwoFactor(player)) {
             return "messages.captcha-two-factor-popup";
         }
-        return isAccountRegistered(player.getUniqueId())
-                ? "messages.captcha-login-popup"
+        if (isAccountRegistered(player.getUniqueId())) {
+            return getAuthMode(player.getUniqueId()).equals("PIN")
+                    ? "messages.captcha-pin-popup"
+                    : "messages.captcha-login-popup";
+        }
+        return defaultAuthMode().equals("PIN")
+                ? "messages.captcha-setpin-popup"
                 : "messages.captcha-register-popup";
     }
 
     private void continueAfterCaptcha(Player player) {
         if (shouldSkipPasswordLoginForTwoFactor(player)) {
             startTwoFactorLogin(player);
+            return;
         }
+        openPinGuiIfNeeded(player);
     }
 
     public boolean shouldSkipPasswordLoginForTwoFactor(Player player) {
@@ -2196,7 +2368,99 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     public boolean updateAccountPassword(UUID uuid, String hash) {
-        return setAccountString(uuid, "password", hash, "password");
+        boolean updated = setAccountString(uuid, "password", hash, "password");
+        if (updated) {
+            setPasswordUsable(uuid, true);
+        }
+        return updated;
+    }
+
+    public boolean isPasswordUsable(UUID uuid) {
+        String usable = getAccountString(uuid, "password.usable", "password_usable");
+        return usable == null || usable.isBlank() || usable.equalsIgnoreCase("true") || usable.equals("1");
+    }
+
+    public boolean setPasswordUsable(UUID uuid, boolean usable) {
+        return setAccountString(uuid, "password.usable", String.valueOf(usable), "password_usable");
+    }
+
+    public String defaultAuthMode() {
+        String configured = getConfig().getString("auth-settings.pin.default-auth-mode", "PASSWORD");
+        return configured != null && configured.equalsIgnoreCase("PIN") ? "PIN" : "PASSWORD";
+    }
+
+    public String getAuthMode(UUID uuid) {
+        String mode = getAccountString(uuid, "auth-mode", "auth_mode");
+        if (mode == null || mode.isBlank()) {
+            mode = "PASSWORD";
+        }
+        return mode.equalsIgnoreCase("PIN") ? "PIN" : "PASSWORD";
+    }
+
+    public boolean setAuthMode(UUID uuid, String mode) {
+        String normalized = mode != null && mode.equalsIgnoreCase("PIN") ? "PIN" : "PASSWORD";
+        return setAccountString(uuid, "auth-mode", normalized, "auth_mode");
+    }
+
+    public String getPinHash(UUID uuid) {
+        return getAccountString(uuid, "pin.hash", "pin_hash");
+    }
+
+    public boolean updateAccountPin(UUID uuid, String hash) {
+        return setAccountString(uuid, "pin.hash", hash, "pin_hash");
+    }
+
+    public PinPolicyResult validatePinPolicy(String pin) {
+        if (!getConfig().getBoolean("auth-settings.pin.enabled", true)) {
+            return PinPolicyResult.error("messages.pin-disabled", Map.of());
+        }
+
+        String safePin = pin == null ? "" : pin;
+        int minLength = Math.max(1, getConfig().getInt("auth-settings.pin.min-length", 4));
+        int maxLength = Math.max(minLength, getConfig().getInt("auth-settings.pin.max-length", 8));
+
+        if (safePin.length() < minLength) {
+            return PinPolicyResult.error("messages.pin-too-short", Map.of("min", String.valueOf(minLength)));
+        }
+        if (safePin.length() > maxLength) {
+            return PinPolicyResult.error("messages.pin-too-long", Map.of("max", String.valueOf(maxLength)));
+        }
+        if (getConfig().getBoolean("auth-settings.pin.numeric-only", true) && !safePin.matches("\\d+")) {
+            return PinPolicyResult.error("messages.pin-numeric-only", Map.of());
+        }
+        if (!getConfig().getBoolean("auth-settings.pin.allow-repeated-digits", false) && isRepeatedPin(safePin)) {
+            return PinPolicyResult.error("messages.pin-repeated-blocked", Map.of());
+        }
+        if (!getConfig().getBoolean("auth-settings.pin.allow-sequential-digits", false) && isSequentialPin(safePin)) {
+            return PinPolicyResult.error("messages.pin-sequential-blocked", Map.of());
+        }
+        if (getConfig().getBoolean("auth-settings.pin.block-common-pins", true)
+                && getConfig().getStringList("auth-settings.pin.common-pins").contains(safePin)) {
+            return PinPolicyResult.error("messages.pin-common-blocked", Map.of());
+        }
+
+        return PinPolicyResult.ok();
+    }
+
+    private boolean isRepeatedPin(String pin) {
+        if (pin.isEmpty()) return false;
+        for (int i = 1; i < pin.length(); i++) {
+            if (pin.charAt(i) != pin.charAt(0)) return false;
+        }
+        return true;
+    }
+
+    private boolean isSequentialPin(String pin) {
+        if (!pin.matches("\\d+") || pin.length() < 3) return false;
+        boolean ascending = true;
+        boolean descending = true;
+        for (int i = 1; i < pin.length(); i++) {
+            int previous = pin.charAt(i - 1) - '0';
+            int current = pin.charAt(i) - '0';
+            ascending &= current == previous + 1;
+            descending &= current == previous - 1;
+        }
+        return ascending || descending;
     }
 
     public long getSecurityCooldownRemainingMillis(Player player, String key) {
@@ -2797,6 +3061,9 @@ public final class Aethelguard extends JavaPlugin {
     private record AuthSession(String ipAddress, long expiresAt) {
     }
 
+    public record AccountIpEntry(String username, String uuid, String registrationIp, String lastIp, String createdAt, String lastLogin) {
+    }
+
     private record VpnCheckResult(boolean suspicious, long checkedAt, String reason) {
     }
 
@@ -2813,9 +3080,62 @@ public final class Aethelguard extends JavaPlugin {
         }
     }
 
+    public record PinPolicyResult(boolean valid, String messagePath, Map<String, String> placeholders) {
+        private static PinPolicyResult ok() {
+            return new PinPolicyResult(true, "", Map.of());
+        }
+
+        private static PinPolicyResult error(String messagePath, Map<String, String> placeholders) {
+            return new PinPolicyResult(false, messagePath, placeholders);
+        }
+    }
+
     public MiniMessage getMiniMessage() { return miniMessage; }
     public DatabaseManager getDatabaseManager() { return databaseManager; }
     public Set<UUID> getUnauthenticatedPlayers() { return unauthenticatedPlayers; }
     public Map<UUID, Location> getPreviousLocations() { return previousLocations; }
     public Map<UUID, Integer> getWrongPasswordAttempts() { return wrongPasswordAttempts; }
+    public Map<UUID, Integer> getWrongPinAttempts() { return wrongPinAttempts; }
+
+    public void markAuthTimeout(Player player, long timeoutTicks) {
+        long timeoutMillis = Math.max(1L, timeoutTicks) * 50L;
+        authTimeoutDeadlines.put(player.getUniqueId(), System.currentTimeMillis() + timeoutMillis);
+    }
+
+    public long getAuthTimeoutRemainingSeconds(Player player) {
+        Long deadline = authTimeoutDeadlines.get(player.getUniqueId());
+        if (deadline == null) {
+            long configuredTicks = getConfig().getLong("auth-settings.timeout.ticks", 1200L);
+            return Math.max(0L, configuredTicks / 20L);
+        }
+        return Math.max(0L, (long) Math.ceil((deadline - System.currentTimeMillis()) / 1000.0));
+    }
+
+    public void clearAuthTimeout(UUID uuid) {
+        authTimeoutDeadlines.remove(uuid);
+    }
+
+    public boolean openPinGuiIfNeeded(Player player) {
+        return pinGui != null && pinGui.openForCurrentState(player);
+    }
+
+    public void closePinGui(Player player) {
+        if (pinGui != null) {
+            pinGui.closeForSuccess(player);
+        }
+    }
+
+    public boolean showPinGuiError(Player player) {
+        return pinGui != null && pinGui.showError(player);
+    }
+
+    public void openPinGuiPreview(Player player, String theme) {
+        if (pinGui != null) {
+            pinGui.openPreview(player, theme);
+        }
+    }
+
+    public List<String> getPinGuiThemes() {
+        return List.of("forest-green", "quartz", "pumpkin", "netherite", "monitor-green", "monitor-red");
+    }
 }

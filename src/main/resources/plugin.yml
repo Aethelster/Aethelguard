@@ -15,6 +15,18 @@ commands:
   login:
     description: Log in to your account.
     aliases: [giris, giriş]
+  pin:
+    description: Log in to your account with PIN.
+    aliases: [pingiris]
+  setpin:
+    description: Create your account PIN.
+    aliases: [pinayarla]
+  changepin:
+    description: Change your account PIN.
+    aliases: [pindegistir]
+  authmode:
+    description: Choose password or PIN authentication mode.
+    aliases: [authmodu]
   changepassword:
     description: Change your own account password.
     aliases: [sifredegistir, şifredeğiştir, password]

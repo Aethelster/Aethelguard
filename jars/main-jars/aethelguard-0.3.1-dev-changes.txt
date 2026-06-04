@@ -1,0 +1,45 @@
+Aethelguard 0.3.1-dev
+Onceki surum: 0.3-sentinel
+
+Bu buildde 0.3-sentinel uzerine eklenenler:
+
+- Komutlar icin ortak tab completion altyapisi eklendi.
+- /aethelguard komutuna ipinfo ve accounts alt komutlari eklendi.
+- /aethelguard ipinfo <player|ip> ile bir oyuncunun son IP adresi veya direkt IP adresi hakkinda ozet bilgi alinabilir.
+- /aethelguard accounts <player|ip> ile ayni IP adresine bagli hesaplar listelenebilir.
+- Two-factor, security question, backup codes, recovery method ve recover komutlari icin tab completion eklendi.
+- PIN login sisteminin komutlu altyapisi eklendi.
+- /pin <pin> ile PIN kullanarak giris yapma eklendi.
+- /setpin <pin> <pin> ile PIN olusturma ve PIN ile kayit olma eklendi.
+- /changepin <oldPin> <newPin> <newPinAgain> ile PIN degistirme eklendi.
+- /authmode status|password|pin ile oyuncunun giris yontemini gormesi veya degistirmesi eklendi.
+- PIN policy ayarlari eklendi: min/max uzunluk, numeric-only, tekrar eden PIN engeli, sirali PIN engeli ve yaygin PIN listesi.
+- PIN icin ayri hatali deneme sayaci ve kick ayarlari eklendi.
+- Local YAML storage icin auth-mode, pin.hash ve password.usable alanlari eklendi.
+- MySQL storage icin auth_mode, pin_hash ve password_usable kolonlari eklendi.
+- PIN ile kayit olan hesaplarin kullanilabilir sifresi olmadiginda password moduna gecmesi engellendi.
+- Recover ile sifre sifirlandiginda hesap tekrar PASSWORD auth mode'a alinacak sekilde duzenlendi.
+- Captcha sonrasi popup, auth prompt ve bossbar mesajlari PIN moduna gore /pin veya /setpin gosterecek sekilde guncellendi.
+- Config dosyasina PIN ayarlari ve aciklamalari eklendi.
+- Config sync sistemine yeni PIN keyleri eklendi.
+- messages_en.yml ve messages_tr.yml dosyalarina PIN, auth mode, ipinfo ve accounts mesajlari eklendi.
+- plugin.yml dosyasina pin, setpin, changepin ve authmode komutlari eklendi.
+- PIN login ve PIN ile kayit icin tiklanabilir 4 haneli GUI keypad eklendi.
+- PIN GUI; captcha bittikten sonra siradaki adim PIN ise otomatik acilacak sekilde baglandi.
+- PIN GUI icin forest-green, quartz, pumpkin, netherite, monitor-green ve monitor-red tema secim altyapisi eklendi.
+- PIN GUI'de special action button kullanimi eklendi: onayla, tek hane sil, tum haneleri sil ve cikis.
+- Netherite tema sadece sayi tuslari icerdigi icin use-special-buttons ayari acik degilse plugin bunu otomatik true yapacak ve console'a sari bilgi basacak.
+- PIN GUI bos slot blogu configden Bukkit material adi ile degistirilebilir hale getirildi.
+- PIN GUI tiklama ve onay sesleri confige eklendi.
+- PIN GUI basliklari, buton isimleri ve cikis kick mesaji messages_en.yml ve messages_tr.yml dosyalarina baglandi.
+- PIN GUI 4 satirdan 5 satira cikarildi.
+- PIN GUI alt satirina kalan PIN deneme hakki gosterimi eklendi.
+- PIN GUI alt satirina auth timeout kalan saniye gosterimi eklendi.
+- Deneme hakki gosterimi maksimum 99, kalan saniye gosterimi maksimum 999 olacak sekilde sinirlandi.
+- Tek haneli deneme hakki sola yakin 1 slot, iki haneli deneme hakki 2 slot kullanacak sekilde yerlestirildi.
+- Kalan sure 1/2/3 haneli olarak her zaman sag alta yapisik gosterilecek sekilde yerlestirildi.
+- Yeni attempts ve numbers head modelleri PIN GUI status satirinda kullanildi.
+
+Not:
+- Bu build gelistirme buildidir.
+- 0.3-sentinel final jar backup ve main jar klasorlerinde korunmustur.

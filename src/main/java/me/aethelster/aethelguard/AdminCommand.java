@@ -67,6 +67,45 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (subCommand.equals("ipinfo")) {
+            if (args.length < 2) {
+                plugin.sendMessage(sender, "messages.admin-ipinfo-usage", true);
+                return true;
+            }
+
+            sendIpInfo(sender, args[1]);
+            return true;
+        }
+
+        if (subCommand.equals("accounts")) {
+            if (args.length < 2) {
+                plugin.sendMessage(sender, "messages.admin-accounts-usage", true);
+                return true;
+            }
+
+            sendAccounts(sender, args[1]);
+            return true;
+        }
+
+        if (subCommand.equals("pingui")) {
+            if (!(sender instanceof Player player)) {
+                plugin.sendMessage(sender, "messages.only-players", true);
+                return true;
+            }
+            if (args.length < 3 || !args[1].equalsIgnoreCase("preview")) {
+                plugin.sendMessage(sender, "messages.admin-pingui-preview-usage", true);
+                return true;
+            }
+            String theme = args[2].toLowerCase(Locale.ROOT);
+            if (!plugin.getPinGuiThemes().contains(theme)) {
+                plugin.sendMessage(sender, "messages.admin-pingui-preview-usage", true);
+                return true;
+            }
+            plugin.openPinGuiPreview(player, theme);
+            plugin.sendMessage(sender, "messages.admin-pingui-preview-opened", true, Map.of("theme", theme));
+            return true;
+        }
+
         if (subCommand.equals("sessions")) {
             sendSessions(sender);
             return true;
@@ -243,6 +282,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
         FileConfiguration config = YamlConfiguration.loadConfiguration(file);
         config.set("password", hash);
+        config.set("password.usable", true);
         config.set("security.last-password-change", java.time.LocalDateTime.now().toString());
         try {
             config.save(file);
@@ -255,7 +295,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     private boolean changeDatabasePassword(String username, String hash) {
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
             if (conn == null) return false;
-            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + plugin.getAuthTableName() + " SET password = ? WHERE LOWER(username) = LOWER(?);")) {
+            try (PreparedStatement ps = conn.prepareStatement("UPDATE " + plugin.getAuthTableName() + " SET password = ?, password_usable = TRUE WHERE LOWER(username) = LOWER(?);")) {
                 ps.setString(1, hash);
                 ps.setString(2, username);
                 return ps.executeUpdate() > 0;
@@ -334,6 +374,74 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void sendIpInfo(CommandSender sender, String input) {
+        String ip = resolveIpInput(input);
+        if (ip == null || ip.equals("-") || ip.equalsIgnoreCase("UNKNOWN")) {
+            plugin.sendMessage(sender, "messages.admin-ipinfo-not-found", true, Map.of("input", input));
+            return;
+        }
+
+        int registrationLimit = plugin.getConfig().getInt("auth-settings.registration.ip-limit.max-accounts", 2);
+        int suspiciousLimit = plugin.getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.reasons.max-accounts-per-ip", 3);
+        List<Aethelguard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
+
+        for (String path : List.of(
+                "messages.admin-ipinfo-line",
+                "messages.admin-ipinfo-title",
+                "messages.admin-ipinfo-ip",
+                "messages.admin-ipinfo-account-count",
+                "messages.admin-ipinfo-registration-limit",
+                "messages.admin-ipinfo-suspicious-limit",
+                "messages.admin-ipinfo-line"
+        )) {
+            plugin.sendMessage(sender, path, false, Map.of(
+                    "input", input,
+                    "ip", ip,
+                    "count", String.valueOf(accounts.size()),
+                    "registration_limit", String.valueOf(registrationLimit),
+                    "suspicious_limit", String.valueOf(suspiciousLimit)
+            ));
+        }
+    }
+
+    private void sendAccounts(CommandSender sender, String input) {
+        String ip = resolveIpInput(input);
+        if (ip == null || ip.equals("-") || ip.equalsIgnoreCase("UNKNOWN")) {
+            plugin.sendMessage(sender, "messages.admin-ipinfo-not-found", true, Map.of("input", input));
+            return;
+        }
+
+        List<Aethelguard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
+        plugin.sendMessage(sender, "messages.admin-accounts-header", true, Map.of(
+                "ip", ip,
+                "count", String.valueOf(accounts.size())
+        ));
+
+        if (accounts.isEmpty()) {
+            plugin.sendMessage(sender, "messages.admin-accounts-empty", true, Map.of("ip", ip));
+            return;
+        }
+
+        for (Aethelguard.AccountIpEntry account : accounts) {
+            plugin.sendMessage(sender, "messages.admin-accounts-entry", false, Map.of(
+                    "player", account.username(),
+                    "uuid", account.uuid(),
+                    "registration_ip", account.registrationIp(),
+                    "last_ip", account.lastIp(),
+                    "created_at", account.createdAt(),
+                    "last_login", account.lastLogin()
+            ));
+        }
+    }
+
+    private String resolveIpInput(String input) {
+        AccountStatus status = plugin.getAccountStatus(input);
+        if (status.found()) {
+            return status.lastIp();
+        }
+        return input;
+    }
+
     private String yesNo(boolean value) {
         return value ? plugin.getFormattedMessageString("messages.admin-status-yes", false)
                 : plugin.getFormattedMessageString("messages.admin-status-no", false);
@@ -399,23 +507,33 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
-            String current = args[0].toLowerCase(Locale.ROOT);
-            List<String> completions = new ArrayList<>();
-            for (String option : List.of("reload", "status", "sessions", "session", "clearsession", "clearsessions", "unregister", "changepassword", "unlogin", "logout")) {
-                if (option.startsWith(current)) completions.add(option);
-            }
-            return completions;
+            return CommandCompletions.filter(args[0], List.of(
+                    "reload",
+                    "status",
+                    "ipinfo",
+                    "accounts",
+                    "sessions",
+                    "session",
+                    "clearsession",
+                    "clearsessions",
+                    "pingui",
+                    "unregister",
+                    "changepassword",
+                    "unlogin",
+                    "logout"
+            ));
         }
 
-        if (args.length == 2 && List.of("status", "session", "clearsession", "unregister", "changepassword", "unlogin", "logout").contains(args[0].toLowerCase(Locale.ROOT))) {
-            String current = args[1].toLowerCase(Locale.ROOT);
-            List<String> completions = new ArrayList<>();
-            for (Player player : plugin.getServer().getOnlinePlayers()) {
-                if (player.getName().toLowerCase(Locale.ROOT).startsWith(current)) {
-                    completions.add(player.getName());
-                }
-            }
-            return completions;
+        if (args.length == 2 && List.of("status", "ipinfo", "accounts", "session", "clearsession", "unregister", "changepassword", "unlogin", "logout").contains(args[0].toLowerCase(Locale.ROOT))) {
+            return CommandCompletions.onlinePlayers(plugin.getServer(), args[1]);
+        }
+
+        if (args.length == 2 && args[0].equalsIgnoreCase("pingui")) {
+            return CommandCompletions.filter(args[1], List.of("preview"));
+        }
+
+        if (args.length == 3 && args[0].equalsIgnoreCase("pingui") && args[1].equalsIgnoreCase("preview")) {
+            return CommandCompletions.filter(args[2], plugin.getPinGuiThemes());
         }
 
         return List.of();

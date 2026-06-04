@@ -1,0 +1,19 @@
+Aethelguard 0.3.2-dev
+Onceki surum: 0.3.1-dev
+
+Bu buildde 0.3.1-dev uzerine eklenenler:
+
+- PIN GUI 4 satirdan 5 satira cikarildi.
+- PIN GUI alt satirina kalan PIN deneme hakki gosterimi eklendi.
+- PIN GUI alt satirina auth timeout kalan saniye gosterimi eklendi.
+- Deneme hakki gosterimi maksimum 99, kalan saniye gosterimi maksimum 999 olacak sekilde sinirlandi.
+- Tek haneli deneme hakki sola yakin 1 slot, iki haneli deneme hakki 2 slot kullanacak sekilde yerlestirildi.
+- Kalan sure 1/2/3 haneli olarak her zaman sag alta yapisik gosterilecek sekilde yerlestirildi.
+- Yeni attempts ve numbers head modelleri PIN GUI status satirinda kullanildi.
+- Auth timeout deadline merkezi tutulacak sekilde eklendi, boylece GUI kalan sureyi oyuncu auth ekranina dustugu andan itibaren gosterir.
+- PIN GUI canli status satiri saniyede bir yenilenecek sekilde ayarlandi.
+- Quit ve basarili login durumlarinda PIN attempts ve auth timeout takipleri temizlenecek sekilde duzenlendi.
+
+Not:
+- Bu build gelistirme buildidir.
+- 0.4-dev'e kadar free surum gelistirme serisi devam edecektir.

@@ -58,6 +58,9 @@ public class DatabaseManager {
                 "uuid VARCHAR(36) NOT NULL UNIQUE," +
                 "username VARCHAR(16) NOT NULL," +
                 "password VARCHAR(255) NOT NULL," +
+                "password_usable BOOLEAN DEFAULT TRUE," +
+                "auth_mode VARCHAR(20) DEFAULT 'PASSWORD'," +
+                "pin_hash VARCHAR(255) DEFAULT NULL," +
                 "auth_type VARCHAR(20) DEFAULT 'TEXT'," +
                 "pin_code VARCHAR(6) DEFAULT NULL," +
                 "totp_secret VARCHAR(32) DEFAULT NULL," +
@@ -96,6 +99,9 @@ public class DatabaseManager {
 
     private void migrateAuthTable(Statement stmt) {
         String table = plugin.getAuthTableName();
+        addColumnIfMissing(stmt, table, "password_usable BOOLEAN DEFAULT TRUE");
+        addColumnIfMissing(stmt, table, "auth_mode VARCHAR(20) DEFAULT 'PASSWORD'");
+        addColumnIfMissing(stmt, table, "pin_hash VARCHAR(255) DEFAULT NULL");
         addColumnIfMissing(stmt, table, "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
         addColumnIfMissing(stmt, table, "registration_ip VARCHAR(45) DEFAULT NULL");
         addColumnIfMissing(stmt, table, "last_ip VARCHAR(45) DEFAULT NULL");

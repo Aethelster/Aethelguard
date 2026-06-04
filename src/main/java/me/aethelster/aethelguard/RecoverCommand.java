@@ -94,6 +94,7 @@ public class RecoverCommand implements CommandExecutor {
         }
 
         if (plugin.updateAccountPassword(player.getUniqueId(), BCrypt.hashpw(newPassword, BCrypt.gensalt()))) {
+            plugin.setAuthMode(player.getUniqueId(), "PASSWORD");
             plugin.markSecurityCooldown(player, "recover");
             plugin.getWrongPasswordAttempts().remove(player.getUniqueId());
             plugin.sendMessage(player, "messages.recover-success", true);

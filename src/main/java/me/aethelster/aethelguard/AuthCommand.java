@@ -53,6 +53,11 @@ public class AuthCommand implements CommandExecutor {
     }
 
     private void handleRegister(Player player, UUID playerUUID, String uuidStr, String ipAddress, String[] args) {
+        if (plugin.defaultAuthMode().equals("PIN")) {
+            plugin.sendMessage(player, "messages.pin-register-required", true);
+            return;
+        }
+
         if (args.length < 2) {
             plugin.getServer().getScheduler().runTask(plugin, () ->
                     plugin.sendMessage(player, "messages.register-usage", true)
@@ -113,6 +118,15 @@ public class AuthCommand implements CommandExecutor {
     }
 
     private void handleLogin(Player player, UUID playerUUID, String uuidStr, String ipAddress, String[] args) {
+        if (plugin.isAccountRegistered(playerUUID) && plugin.getAuthMode(playerUUID).equals("PIN")) {
+            plugin.sendMessage(player, "messages.pin-required", true);
+            return;
+        }
+        if (plugin.isAccountRegistered(playerUUID) && !plugin.isPasswordUsable(playerUUID)) {
+            plugin.sendMessage(player, "messages.password-not-available", true);
+            return;
+        }
+
         if (args.length < 1) {
             plugin.sendMessage(player, "messages.login-usage", true);
             return;
@@ -229,7 +243,10 @@ public class AuthCommand implements CommandExecutor {
             FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
             config.set("uuid", uuid);
             config.set("username", username);
+            config.set("auth-mode", "PASSWORD");
             config.set("password", hashedPassword);
+            config.set("password.usable", true);
+            config.set("pin.hash", null);
             config.set("created-at", now);
             config.set("registration-ip", ipAddress);
             config.set("last-login", now);
@@ -262,19 +279,22 @@ public class AuthCommand implements CommandExecutor {
             if (conn == null) return false;
             try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO " + plugin.getAuthTableName() +
-                            " (uuid, username, password, registration_ip, last_ip, last_world, last_x, last_y, last_z, login_count) " +
-                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+                            " (uuid, username, password, password_usable, auth_mode, pin_hash, registration_ip, last_ip, last_world, last_x, last_y, last_z, login_count) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
             )) {
                 ps.setString(1, uuid);
                 ps.setString(2, username);
                 ps.setString(3, hashedPassword);
-                ps.setString(4, ipAddress);
-                ps.setString(5, ipAddress);
-                ps.setString(6, location.getWorld() == null ? "UNKNOWN" : location.getWorld().getName());
-                ps.setDouble(7, location.getX());
-                ps.setDouble(8, location.getY());
-                ps.setDouble(9, location.getZ());
-                ps.setInt(10, 0);
+                ps.setBoolean(4, true);
+                ps.setString(5, "PASSWORD");
+                ps.setString(6, null);
+                ps.setString(7, ipAddress);
+                ps.setString(8, ipAddress);
+                ps.setString(9, location.getWorld() == null ? "UNKNOWN" : location.getWorld().getName());
+                ps.setDouble(10, location.getX());
+                ps.setDouble(11, location.getY());
+                ps.setDouble(12, location.getZ());
+                ps.setInt(13, 0);
                 ps.executeUpdate();
                 return true;
             }
