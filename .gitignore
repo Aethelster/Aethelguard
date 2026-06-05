@@ -116,3 +116,8 @@ run/
 
 # Temporary jar restore workspace
 .restore-jars/
+
+# Local release artifacts and forum/promo drafts
+docs/
+jars/
+jar-backups/
