@@ -159,7 +159,10 @@ public class AuthListener implements Listener {
     }
 
     private boolean shouldDelayFirstPrompt(String state) {
-        return state.equals("captcha") || state.equals("security-question") || state.equals("pin-gui");
+        return state.equals("captcha")
+                || state.equals("security-question")
+                || state.equals("two-factor")
+                || state.equals("pin-gui");
     }
 
     private String getPromptState(Player player) {
