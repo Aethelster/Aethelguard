@@ -653,7 +653,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         if (file == null) return false;
 
         FileConfiguration config = YamlConfiguration.loadConfiguration(file);
-        config.set("password", hash);
+        config.set("password.hash", hash);
         config.set("password.usable", true);
         config.set("security.last-password-change", plugin.formatDate(new Date()));
         try {

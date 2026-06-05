@@ -60,6 +60,7 @@ public class PinGui implements Listener {
     private final PinCommand pinCommand;
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final Map<UUID, BukkitTask> updateTasks = new HashMap<>();
+    private final Map<UUID, Integer> closeAttempts = new HashMap<>();
     private final Set<UUID> intentionalClose = new java.util.HashSet<>();
 
     public PinGui(Aethelguard plugin, PinCommand pinCommand) {
@@ -84,6 +85,13 @@ public class PinGui implements Listener {
         if (!plugin.defaultAuthMode().equals("PIN")) return false;
         open(player, Mode.SETUP, null);
         return true;
+    }
+
+    public boolean isOpen(Player player) {
+        UUID uuid = player.getUniqueId();
+        return sessions.containsKey(uuid)
+                && player.getOpenInventory().getTopInventory().getHolder() instanceof PinGuiHolder holder
+                && holder.uuid().equals(uuid);
     }
 
     public void openPreview(Player player, String themeName) {
@@ -118,6 +126,7 @@ public class PinGui implements Listener {
     public void closeForSuccess(Player player) {
         intentionalClose.add(player.getUniqueId());
         closeSession(player.getUniqueId());
+        closeAttempts.remove(player.getUniqueId());
         player.closeInventory();
     }
 
@@ -129,6 +138,7 @@ public class PinGui implements Listener {
         render(inventory, session, player);
         player.openInventory(inventory);
         startUpdater(player);
+        plugin.updateAuthBossBar(player);
         plugin.playConfiguredSound(player, "auth-settings.sounds.pin-gui-open");
     }
 
@@ -353,6 +363,7 @@ public class PinGui implements Listener {
             if (session.mode() == Mode.PREVIEW) {
                 intentionalClose.add(player.getUniqueId());
                 closeSession(player.getUniqueId());
+                closeAttempts.remove(player.getUniqueId());
                 player.closeInventory();
                 plugin.playConfiguredSound(player, "auth-settings.sounds.pin-gui-close");
                 return;
@@ -389,6 +400,18 @@ public class PinGui implements Listener {
 
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (player.isOnline() && !plugin.isAuthenticated(player) && plugin.getUnauthenticatedPlayers().contains(uuid)) {
+                int attempts = closeAttempts.getOrDefault(uuid, 0) + 1;
+                closeAttempts.put(uuid, attempts);
+                if (attempts >= 5) {
+                    intentionalClose.add(uuid);
+                    closeSession(uuid);
+                    closeAttempts.remove(uuid);
+                    plugin.restorePreviousLocation(player);
+                    plugin.restoreAuthInventory(player);
+                    plugin.hideAuthBossBar(player);
+                    player.kickPlayer(plugin.getRawStringMessage("messages.pin-gui-close-spam-kick", true));
+                    return;
+                }
                 openForCurrentState(player);
             }
         });
@@ -443,6 +466,7 @@ public class PinGui implements Listener {
         UUID uuid = player.getUniqueId();
         intentionalClose.add(uuid);
         closeSession(uuid);
+        closeAttempts.remove(uuid);
         plugin.playConfiguredSound(player, "auth-settings.sounds.pin-gui-close");
         plugin.restorePreviousLocation(player);
         plugin.restoreAuthInventory(player);

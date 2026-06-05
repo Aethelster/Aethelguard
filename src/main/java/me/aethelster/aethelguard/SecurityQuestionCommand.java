@@ -21,17 +21,22 @@ public class SecurityQuestionCommand implements CommandExecutor {
             return true;
         }
 
-        if (!plugin.isAuthenticated(player)) {
+        boolean registrationQuestionPending = plugin.isRegistrationSecurityQuestionPending(player);
+        if (!plugin.isAuthenticated(player) && !registrationQuestionPending) {
             plugin.sendMessage(player, "messages.security-question-auth-required", true);
             return true;
         }
 
-        if (!plugin.getConfig().getBoolean("recovery.security-questions.enabled", true)) {
+        if (!registrationQuestionPending && !plugin.getConfig().getBoolean("recovery.security-questions.enabled", true)) {
             plugin.sendMessage(player, "messages.security-question-disabled", true);
             return true;
         }
 
         if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
+            if (registrationQuestionPending) {
+                plugin.sendMessage(player, "messages.security-question-register-answer", true);
+                return true;
+            }
             Aethelguard.SecurityQuestion question = plugin.getStoredSecurityQuestion(player.getUniqueId());
             plugin.sendMessage(player, question == null
                     ? "messages.security-question-status-missing"
@@ -40,6 +45,14 @@ public class SecurityQuestionCommand implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("setup") || args[0].equalsIgnoreCase("change")) {
+            if (registrationQuestionPending) {
+                plugin.sendMessage(player, "messages.security-question-register-answer", true);
+                return true;
+            }
+            if (plugin.getStoredSecurityQuestion(player.getUniqueId()) != null) {
+                plugin.sendMessage(player, "messages.security-question-change-disabled", true);
+                return true;
+            }
             long remaining = plugin.getSecurityCooldownRemainingMillis(player, "security-question-change");
             if (remaining > 0L) {
                 plugin.sendMessage(player, "messages.security-cooldown-active", true,
@@ -60,7 +73,9 @@ public class SecurityQuestionCommand implements CommandExecutor {
             }
 
             String answer = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length));
-            if (plugin.confirmSecurityQuestion(player, answer)) {
+            if (registrationQuestionPending) {
+                plugin.completeRegistrationSecurityQuestion(player, answer);
+            } else if (plugin.confirmSecurityQuestion(player, answer)) {
                 plugin.markSecurityCooldown(player, "security-question-change");
                 plugin.sendMessage(player, "messages.security-question-saved", true);
             } else {

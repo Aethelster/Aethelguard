@@ -94,6 +94,10 @@ public class PinCommand implements CommandExecutor {
             if (BCrypt.checkpw(pin, pinHash)) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (!player.isOnline()) return;
+                    if (plugin.beginMissingRegistrationSecurityQuestion(player, null)) {
+                        plugin.closePinGui(player);
+                        return;
+                    }
                     plugin.getUnauthenticatedPlayers().remove(uuid);
                     plugin.getWrongPinAttempts().remove(uuid);
                     plugin.closePinGui(player);
@@ -301,8 +305,11 @@ public class PinCommand implements CommandExecutor {
 
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (!player.isOnline()) return;
-            plugin.getUnauthenticatedPlayers().remove(player.getUniqueId());
             plugin.closePinGui(player);
+            if (plugin.beginRegistrationSecurityQuestion(player)) {
+                return;
+            }
+            plugin.getUnauthenticatedPlayers().remove(player.getUniqueId());
             plugin.playConfiguredSound(player, fromGui ? "auth-settings.sounds.pin-gui-success" : "auth-settings.sounds.register-success");
             plugin.completeLogin(player, false);
             plugin.rememberAuthSession(player);
@@ -323,7 +330,7 @@ public class PinCommand implements CommandExecutor {
         config.set("uuid", uuid);
         config.set("username", playerName);
         config.set("auth-mode", "PIN");
-        config.set("password", passwordHash);
+        config.set("password.hash", passwordHash);
         config.set("password.usable", false);
         config.set("pin.hash", pinHash);
         config.set("created-at", now);

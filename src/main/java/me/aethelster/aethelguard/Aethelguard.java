@@ -37,6 +37,7 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -57,9 +58,13 @@ import java.util.logging.Handler;
 import java.util.logging.LogManager;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class Aethelguard extends JavaPlugin {
     private static final int AUTH_LOCKOUT_KICK_CYCLES = 2;
+    private static final String URL_AMP_SENTINEL = "\u0007URL_AMP\u0007";
+    private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s<>'\"]+");
 
     private DatabaseManager databaseManager;
     private final Map<UUID, Location> previousLocations = new HashMap<>();
@@ -76,6 +81,9 @@ public final class Aethelguard extends JavaPlugin {
     private final Set<UUID> pendingTwoFactorPlayers = new HashSet<>();
     private final Map<UUID, String> pendingTwoFactorSetups = new HashMap<>();
     private final Map<UUID, SecurityQuestion> pendingSecurityQuestions = new HashMap<>();
+    private final Set<UUID> registrationSecurityQuestionPlayers = new HashSet<>();
+    private final Set<UUID> loginSecurityQuestionPlayers = new HashSet<>();
+    private final Set<UUID> twoFactorSecurityQuestionPlayers = new HashSet<>();
     private final Map<UUID, AuthInventorySnapshot> authInventories = new HashMap<>();
     private final Map<UUID, BossBar> authBossBars = new HashMap<>();
     private final Map<UUID, Long> authTimeoutDeadlines = new HashMap<>();
@@ -112,6 +120,7 @@ public final class Aethelguard extends JavaPlugin {
     private FileConfiguration langConfig = null;
     private File langFile = null;
     private PinGui pinGui;
+    private AuthListener authListener;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final String consolePrefix = "§b[Aethelguard] §r";
 
@@ -351,7 +360,13 @@ public final class Aethelguard extends JavaPlugin {
         bossBar.setColor(getBossBarColor());
         bossBar.setStyle(getBossBarStyle());
         bossBar.setProgress(Math.max(0.0, Math.min(1.0, getConfig().getDouble("auth-settings.bossbar.progress", 1.0))));
-        bossBar.setTitle(getRawStringMessage(getAuthBossBarMessagePath(player), false));
+        String bossBarPath = getAuthBossBarMessagePath(player);
+        if (bossBarPath.equals("messages.bossbar-pin-gui")) {
+            bossBar.setTitle(getRawStringMessage(bossBarPath, false));
+        } else {
+            bossBar.setTitle(getRawStringMessage(bossBarPath, false,
+                    Map.of("seconds", String.valueOf(getAuthTimeoutRemainingSeconds(player)))));
+        }
         bossBar.setVisible(true);
     }
 
@@ -366,16 +381,19 @@ public final class Aethelguard extends JavaPlugin {
         if (isCaptchaRequired(player)) {
             return "messages.bossbar-captcha";
         }
+        if (isRegistrationSecurityQuestionPending(player)) {
+            return "messages.bossbar-security-question";
+        }
         if (isWaitingTwoFactor(player)) {
             return "messages.bossbar-two-factor";
         }
         if (isAccountRegistered(player.getUniqueId())) {
             return getAuthMode(player.getUniqueId()).equals("PIN")
-                    ? "messages.bossbar-pin"
+                    ? (isPinGuiOpen(player) ? "messages.bossbar-pin-gui" : "messages.bossbar-pin")
                     : "messages.bossbar-login";
         }
         return defaultAuthMode().equals("PIN")
-                ? "messages.bossbar-setpin"
+                ? (isPinGuiOpen(player) ? "messages.bossbar-pin-gui" : "messages.bossbar-setpin")
                 : "messages.bossbar-register";
     }
 
@@ -406,6 +424,9 @@ public final class Aethelguard extends JavaPlugin {
         recordAdaptiveSuccessfulAuth(player);
         clearCaptchaState(uuid);
         clearTwoFactorState(uuid);
+        clearRegistrationSecurityQuestion(uuid);
+        loginSecurityQuestionPlayers.remove(uuid);
+        twoFactorSecurityQuestionPlayers.remove(uuid);
         hideAuthBossBar(player);
 
         clearAuthEffects(player);
@@ -528,23 +549,6 @@ public final class Aethelguard extends JavaPlugin {
 
         reconnectDatabase();
 
-        if (getConfig().getBoolean("auth-settings.reload.reauth-online-players", true)) {
-            boolean tpVoid = getConfig().getBoolean("auth-settings.teleport-to-void", true);
-            for (Player onlinePlayer : getServer().getOnlinePlayers()) {
-                UUID uuid = onlinePlayer.getUniqueId();
-                unauthenticatedPlayers.add(uuid);
-                rememberPreviousLocation(onlinePlayer);
-                hideInventoryForAuth(onlinePlayer);
-
-                if (tpVoid) {
-                    Location voidLoc = getVoidLocation(onlinePlayer);
-                    onlinePlayer.teleport(voidLoc);
-                }
-                applyAuthEffects(onlinePlayer);
-                sendMessage(onlinePlayer, "messages.plugin-reloaded-auth", true);
-            }
-        }
-
         AuthCommand authCommand = new AuthCommand(this);
         AdminCommand adminCommand = new AdminCommand(this);
         PinCommand pinCommand = new PinCommand(this);
@@ -571,9 +575,12 @@ public final class Aethelguard extends JavaPlugin {
         getCommand("recover").setTabCompleter(CommandCompletions.firstArgument(List.of("question", "code", "backup-code")));
         getCommand("aethelguard").setExecutor(adminCommand);
         getCommand("aethelguard").setTabCompleter(adminCommand);
-        getServer().getPluginManager().registerEvents(new AuthListener(this), this);
+        authListener = new AuthListener(this);
+        getServer().getPluginManager().registerEvents(authListener, this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
         getServer().getPluginManager().registerEvents(pinGui, this);
+
+        reauthOnlinePlayersAfterReload();
 
         logInfo("Aethelguard başarıyla aktif edildi.", "Aethelguard successfully enabled.");
     }
@@ -604,6 +611,7 @@ public final class Aethelguard extends JavaPlugin {
             ensureStatusStorage();
             reconnectDatabase();
             refreshOnlineAccountSnapshots();
+            reauthOnlinePlayersAfterReload();
 
             logInfo("Aethelguard ayarları yeniden yüklendi.", "Aethelguard settings reloaded.");
             return true;
@@ -611,6 +619,40 @@ public final class Aethelguard extends JavaPlugin {
             logWarning("Ayarlar yeniden yüklenirken hata oluştu.", "An error occurred while reloading settings.");
             e.printStackTrace();
             return false;
+        }
+    }
+
+    private void reauthOnlinePlayersAfterReload() {
+        if (!getConfig().getBoolean("auth-settings.reload.reauth-online-players", true)) {
+            return;
+        }
+
+        boolean tpVoid = getConfig().getBoolean("auth-settings.teleport-to-void", true);
+        for (Player onlinePlayer : getServer().getOnlinePlayers()) {
+            UUID uuid = onlinePlayer.getUniqueId();
+            loggedInPlayers.remove(uuid);
+            authSessions.remove(uuid);
+            wrongPasswordAttempts.remove(uuid);
+            wrongPinAttempts.remove(uuid);
+            clearCaptchaState(uuid);
+            clearTwoFactorState(uuid);
+            clearRegistrationSecurityQuestion(uuid);
+            unauthenticatedPlayers.add(uuid);
+            rememberPreviousLocation(onlinePlayer);
+            hideInventoryForAuth(onlinePlayer);
+
+            if (tpVoid) {
+                onlinePlayer.teleport(getVoidLocation(onlinePlayer));
+            }
+
+            applyAuthEffects(onlinePlayer);
+            startCaptcha(onlinePlayer);
+            updateAuthBossBar(onlinePlayer);
+            if (authListener != null) {
+                authListener.startAuthPrompts(onlinePlayer);
+                authListener.startAuthTimeout(onlinePlayer);
+            }
+            sendMessage(onlinePlayer, "messages.plugin-reloaded-auth", true);
         }
     }
 
@@ -840,6 +882,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("recovery.enabled", true),
                 Map.entry("recovery.offer-before-kick", true),
                 Map.entry("recovery.security-questions.enabled", true),
+                Map.entry("recovery.security-questions.require-after-register", true),
                 Map.entry("recovery.backup-codes.enabled", true),
                 Map.entry("recovery.backup-codes.count", 6),
                 Map.entry("recovery.backup-codes.length", 10),
@@ -873,6 +916,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.two-factor.enabled", true),
                 Map.entry("auth-settings.two-factor.issuer", "Aethelguard"),
                 Map.entry("auth-settings.two-factor.code-window", 1),
+                Map.entry("auth-settings.two-factor.timeout-ticks", 1200),
                 Map.entry("auth-settings.sessions.enabled", true),
                 Map.entry("auth-settings.sessions.duration-minutes", 10),
                 Map.entry("auth-settings.sessions.match-ip", true),
@@ -897,6 +941,8 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.prompts.pin-interval-ticks", 200),
                 Map.entry("auth-settings.prompts.setpin-repeat-enabled", true),
                 Map.entry("auth-settings.prompts.setpin-interval-ticks", 200),
+                Map.entry("auth-settings.prompts.security-question-repeat-enabled", true),
+                Map.entry("auth-settings.prompts.security-question-interval-ticks", 200),
                 Map.entry("auth-settings.prompts.two-factor-repeat-enabled", true),
                 Map.entry("auth-settings.prompts.two-factor-interval-ticks", 200),
                 Map.entry("auth-settings.bossbar.enabled", true),
@@ -904,7 +950,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.bossbar.style", "SOLID"),
                 Map.entry("auth-settings.bossbar.progress", 1.0),
                 Map.entry("auth-settings.timeout.enabled", true),
-                Map.entry("auth-settings.timeout.ticks", 1200),
+                Map.entry("auth-settings.timeout.ticks", 1800),
                 Map.entry("auth-settings.timeout.kick", true),
                 Map.entry("auth-settings.restrictions.prevent-movement", true),
                 Map.entry("auth-settings.restrictions.prevent-damage", true),
@@ -928,6 +974,12 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.sounds.login-success.pitch", 1.0),
                 Map.entry("auth-settings.sounds.login-success.repeat-times", 2),
                 Map.entry("auth-settings.sounds.login-success.repeat-interval-ticks", 6),
+                Map.entry("auth-settings.sounds.two-factor-success.enabled", true),
+                Map.entry("auth-settings.sounds.two-factor-success.sound", "entity.player.levelup"),
+                Map.entry("auth-settings.sounds.two-factor-success.volume", 1.0),
+                Map.entry("auth-settings.sounds.two-factor-success.pitch", 1.35),
+                Map.entry("auth-settings.sounds.two-factor-success.repeat-times", 2),
+                Map.entry("auth-settings.sounds.two-factor-success.repeat-interval-ticks", 5),
                 Map.entry("auth-settings.sounds.wrong-password.enabled", true),
                 Map.entry("auth-settings.sounds.wrong-password.sound", "entity.item.break"),
                 Map.entry("auth-settings.sounds.wrong-password.volume", 1.0),
@@ -971,7 +1023,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.repeat-times", 1),
                 Map.entry("auth-settings.sounds.pin-gui-disabled-confirm.repeat-interval-ticks", 1),
                 Map.entry("auth-settings.sounds.pin-gui-success.enabled", true),
-                Map.entry("auth-settings.sounds.pin-gui-success.sound", "entity.villager.trade"),
+                Map.entry("auth-settings.sounds.pin-gui-success.sound", "entity.player.levelup"),
                 Map.entry("auth-settings.sounds.pin-gui-success.volume", 1.0),
                 Map.entry("auth-settings.sounds.pin-gui-success.pitch", 1.1),
                 Map.entry("auth-settings.sounds.pin-gui-success.repeat-times", 1),
@@ -1017,6 +1069,10 @@ public final class Aethelguard extends JavaPlugin {
             getConfig().set("auth-settings.pin.gui.filler-material", null);
             changed = true;
         }
+        if (getConfig().isSet("auth-settings.two-factor.captcha-timeout-ticks")) {
+            getConfig().set("auth-settings.two-factor.captcha-timeout-ticks", null);
+            changed = true;
+        }
         for (String legacyPinLengthKey : List.of(
                 "auth-settings.pin.min-length",
                 "auth-settings.pin.max-length",
@@ -1042,6 +1098,12 @@ public final class Aethelguard extends JavaPlugin {
             changed = true;
         }
         for (String command : List.of("/pin", "/setpin", "/pinayarla")) {
+            if (!allowedCommands.contains(command)) {
+                allowedCommands.add(command);
+                changed = true;
+            }
+        }
+        for (String command : List.of("/securityquestion", "/securityq", "/guvenliksorusu", "/güvenliksorusu")) {
             if (!allowedCommands.contains(command)) {
                 allowedCommands.add(command);
                 changed = true;
@@ -1151,6 +1213,11 @@ public final class Aethelguard extends JavaPlugin {
             }
 
             if (value instanceof List<?> list) {
+                if (list.isEmpty()) {
+                    rendered.add(configLine.indentText() + configLine.key() + ": []");
+                    i = skipTemplateChildBlock(templateLines, i, configLine.indent());
+                    continue;
+                }
                 rendered.add(configLine.indentText() + configLine.key() + ":");
                 for (Object item : list) {
                     rendered.add(configLine.indentText() + "  - " + formatYamlValue(item));
@@ -1428,11 +1495,7 @@ public final class Aethelguard extends JavaPlugin {
         String cleanMsg = msg.replace("§", "&");
 
 
-        String processed = cleanMsg;
-
-        for (Map.Entry<String, String> entry : COLOR_MAP.entrySet()) {
-            processed = processed.replace(entry.getKey(), entry.getValue());
-        }
+        String processed = convertLegacyColors(cleanMsg);
 
 
         sender.sendMessage(miniMessage.deserialize(processed));
@@ -1443,9 +1506,29 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     public String getRawStringMessage(String path, boolean prefix, Map<String, String> placeholders) {
-        return LegacyComponentSerializer.legacySection().serialize(
-                LegacyComponentSerializer.legacyAmpersand().deserialize(applyPlaceholders(getFormattedMessageString(path, prefix), placeholders).replace("§", "&"))
-        );
+        String processed = applyPlaceholders(getFormattedMessageString(path, prefix), placeholders)
+                .replace("§", "&")
+                .replace("Â§", "&");
+        processed = convertLegacyColors(processed);
+        return LegacyComponentSerializer.legacySection().serialize(miniMessage.deserialize(processed));
+    }
+
+    private String convertLegacyColors(String message) {
+        String processed = protectUrlAmpersands(message);
+        for (Map.Entry<String, String> entry : COLOR_MAP.entrySet()) {
+            processed = processed.replace(entry.getKey(), entry.getValue());
+        }
+        return processed.replace(URL_AMP_SENTINEL, "&");
+    }
+
+    private String protectUrlAmpersands(String message) {
+        Matcher matcher = URL_PATTERN.matcher(message);
+        StringBuilder result = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group().replace("&", URL_AMP_SENTINEL)));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     public String getFormattedMessageString(String path, boolean prefix) {
@@ -1804,6 +1887,7 @@ public final class Aethelguard extends JavaPlugin {
         boolean suspicious = isSuspiciousIp(player);
         if (suspicious) {
             extraCaptchaPlayers.put(player.getUniqueId(), true);
+            sendMessage(player, "messages.adaptive-extra-captcha", true);
             if (getConfig().getBoolean("console-logging.log-auth-state-changes", true)) {
                 logInfo(
                         player.getName() + " şüpheli IP nedeniyle ekstra captcha alacak.",
@@ -2216,6 +2300,7 @@ public final class Aethelguard extends JavaPlugin {
         if (shouldBypassCaptchaForTrustedIp(player)) {
             captchaVerifiedPlayers.add(player.getUniqueId());
             extraCaptchaPlayers.remove(player.getUniqueId());
+            sendMessage(player, "messages.adaptive-captcha-bypass", true);
             continueAfterCaptcha(player);
             updateAuthBossBar(player);
             return;
@@ -2232,6 +2317,7 @@ public final class Aethelguard extends JavaPlugin {
         captchaChallenges.put(player.getUniqueId(), challenge);
         if (challenge.type().equals("MAP") && getConfig().getBoolean("auth-settings.captcha.map.give-item", true)) {
             giveCaptchaMap(player, challenge.display());
+            lockCaptchaView(player);
         }
         updateAuthBossBar(player);
         sendCaptchaPrompt(player);
@@ -2376,8 +2462,31 @@ public final class Aethelguard extends JavaPlugin {
 
     public void startTwoFactorLogin(Player player) {
         pendingTwoFactorPlayers.add(player.getUniqueId());
+        restartAuthTimeout(player, getTwoFactorTimeoutTicks());
         updateAuthBossBar(player);
         sendMessage(player, "messages.two-factor-login-required", true);
+    }
+
+    public long getInitialAuthTimeoutTicks(Player player) {
+        if (isWaitingTwoFactor(player)) {
+            return getTwoFactorTimeoutTicks();
+        }
+        if (shouldSkipPasswordLoginForTwoFactor(player)) {
+            return 600L;
+        }
+        return Math.max(20L, getConfig().getLong("auth-settings.timeout.ticks", 1800L));
+    }
+
+    private long getTwoFactorTimeoutTicks() {
+        return Math.max(20L, getConfig().getLong("auth-settings.two-factor.timeout-ticks", 1200L));
+    }
+
+    private void restartAuthTimeout(Player player, long timeoutTicks) {
+        if (authListener != null) {
+            authListener.startAuthTimeout(player, timeoutTicks);
+        } else {
+            markAuthTimeout(player, timeoutTicks);
+        }
     }
 
     public void completeTwoFactorLogin(Player player, String code) {
@@ -2389,6 +2498,10 @@ public final class Aethelguard extends JavaPlugin {
 
         pendingTwoFactorPlayers.remove(player.getUniqueId());
         wrongPasswordAttempts.remove(player.getUniqueId());
+        if (beginMissingRegistrationSecurityQuestion(player, 600L, true)) {
+            return;
+        }
+        playConfiguredSound(player, "auth-settings.sounds.two-factor-success");
         completeLogin(player, true);
         rememberAuthSession(player);
         updateAccountSnapshot(player, true);
@@ -2405,6 +2518,22 @@ public final class Aethelguard extends JavaPlugin {
         String secret = randomBase32(32);
         pendingTwoFactorSetups.put(player.getUniqueId(), secret);
         return secret;
+    }
+
+    public String createTwoFactorQrUrl(Player player, String secret) {
+        String issuer = getConfig().getString("auth-settings.two-factor.issuer", "Aethelguard");
+        if (issuer == null || issuer.isBlank()) {
+            issuer = "Aethelguard";
+        }
+        String label = issuer + ":" + player.getName();
+        String otpauth = "otpauth://totp/" + urlEncode(label)
+                + "?secret=" + urlEncode(secret)
+                + "&issuer=" + urlEncode(issuer);
+        return "https://api.qrserver.com/v1/create-qr-code/?data=" + urlEncode(otpauth) + "&size=220x220";
+    }
+
+    private String urlEncode(String text) {
+        return URLEncoder.encode(text, StandardCharsets.UTF_8);
     }
 
     public void confirmTwoFactorSetup(Player player, String code) {
@@ -2472,6 +2601,156 @@ public final class Aethelguard extends JavaPlugin {
             pendingSecurityQuestions.remove(player.getUniqueId());
         }
         return saved;
+    }
+
+    public boolean shouldRequireSecurityQuestionAfterRegister() {
+        return getConfig().getBoolean("recovery.enabled", true)
+                && getConfig().getBoolean("recovery.security-questions.enabled", true)
+                && getConfig().getBoolean("recovery.security-questions.require-after-register", true);
+    }
+
+    public boolean beginRegistrationSecurityQuestion(Player player) {
+        if (!shouldRequireSecurityQuestionAfterRegister()) {
+            return false;
+        }
+
+        beginRegistrationSecurityQuestion(player, null);
+        return true;
+    }
+
+    public boolean beginMissingRegistrationSecurityQuestion(Player player, Long timeoutTicks) {
+        return beginMissingRegistrationSecurityQuestion(player, timeoutTicks, false);
+    }
+
+    public boolean beginMissingRegistrationSecurityQuestion(Player player, Long timeoutTicks, boolean afterTwoFactor) {
+        if (!shouldRequireSecurityQuestionAfterRegister()
+                || getStoredSecurityQuestion(player.getUniqueId()) != null) {
+            return false;
+        }
+
+        UUID uuid = player.getUniqueId();
+        loginSecurityQuestionPlayers.add(uuid);
+        if (afterTwoFactor) {
+            twoFactorSecurityQuestionPlayers.add(uuid);
+        }
+        beginRegistrationSecurityQuestion(player, timeoutTicks);
+        return true;
+    }
+
+    private void beginRegistrationSecurityQuestion(Player player, Long timeoutTicks) {
+        SecurityQuestion question = createPendingSecurityQuestion(player);
+        registrationSecurityQuestionPlayers.add(player.getUniqueId());
+        if (timeoutTicks != null) {
+            restartAuthTimeout(player, timeoutTicks);
+        }
+        clearPlayerChat(player);
+        updateAuthBossBar(player);
+        showRegistrationSecurityQuestionTitle(player);
+        sendMessage(player, "messages.security-question-register-explain", true,
+                Map.of("question", question.text()));
+        sendMessage(player, "messages.security-question-register-answer", true);
+    }
+
+    public boolean isRegistrationSecurityQuestionPending(Player player) {
+        return isRegistrationSecurityQuestionPending(player.getUniqueId());
+    }
+
+    public boolean isRegistrationSecurityQuestionPending(UUID uuid) {
+        return registrationSecurityQuestionPlayers.contains(uuid);
+    }
+
+    public boolean completeRegistrationSecurityQuestion(Player player, String answer) {
+        UUID uuid = player.getUniqueId();
+        if (!registrationSecurityQuestionPlayers.contains(uuid)) {
+            return false;
+        }
+
+        if (!confirmSecurityQuestion(player, answer)) {
+            sendMessage(player, "messages.security-question-no-pending", true);
+            return true;
+        }
+
+        registrationSecurityQuestionPlayers.remove(uuid);
+        sendMessage(player, "messages.security-question-register-saved", true);
+        if (loginSecurityQuestionPlayers.remove(uuid)) {
+            finishLoginAfterSecurityQuestion(player, twoFactorSecurityQuestionPlayers.remove(uuid));
+            return true;
+        }
+        finishRegistrationAfterSecurityQuestion(player);
+        return true;
+    }
+
+    public void clearRegistrationSecurityQuestion(UUID uuid) {
+        registrationSecurityQuestionPlayers.remove(uuid);
+        loginSecurityQuestionPlayers.remove(uuid);
+        twoFactorSecurityQuestionPlayers.remove(uuid);
+        pendingSecurityQuestions.remove(uuid);
+    }
+
+    private void showRegistrationSecurityQuestionTitle(Player player) {
+        String title = getFormattedMessageString("messages.security-question-register-title", false);
+        String subtitle = getFormattedMessageString("messages.security-question-register-subtitle", false);
+        player.showTitle(Title.title(
+                miniMessage.deserialize(title),
+                miniMessage.deserialize(subtitle),
+                Title.Times.times(Duration.ofMillis(300), Duration.ofSeconds(3), Duration.ofMillis(700))
+        ));
+    }
+
+    private void finishRegistrationAfterSecurityQuestion(Player player) {
+        if (!player.isOnline()) return;
+
+        String authMode = getAuthMode(player.getUniqueId());
+        playConfiguredSound(player, authMode.equals("PIN")
+                ? "auth-settings.sounds.pin-gui-success"
+                : "auth-settings.sounds.register-success");
+        completeLogin(player, false);
+        rememberAuthSession(player);
+        player.teleport(player.getWorld().getSpawnLocation());
+        updateAccountSnapshot(player, true);
+
+        if (getConfig().getBoolean("console-logging.log-auth-success", true)) {
+            if (authMode.equals("PIN")) {
+                logInfo(
+                        player.getName() + " PIN ile başarıyla kayıt oldu.",
+                        player.getName() + " registered successfully with PIN."
+                );
+            } else {
+                logInfo(
+                        player.getName() + " başarıyla kayıt oldu.",
+                        player.getName() + " registered successfully."
+                );
+            }
+        }
+
+        sendMessage(player, authMode.equals("PIN")
+                ? "messages.pin-register-success"
+                : "messages.register-success", true);
+    }
+
+    private void finishLoginAfterSecurityQuestion(Player player, boolean afterTwoFactor) {
+        if (!player.isOnline()) return;
+
+        playConfiguredSound(player, afterTwoFactor
+                ? "auth-settings.sounds.two-factor-success"
+                : "auth-settings.sounds.login-success");
+        completeLogin(player, true);
+        rememberAuthSession(player);
+        updateAccountSnapshot(player, true);
+
+        if (getConfig().getBoolean("console-logging.log-auth-success", true)) {
+            if (afterTwoFactor) {
+                logInfo(
+                        player.getName() + " iki asamali dogrulama ve guvenlik sorusu ile giris yapti.",
+                        player.getName() + " completed login with two-factor authentication and a security question."
+                );
+            } else {
+                logInfo(
+                        player.getName() + " guvenlik sorusunu tamamlayarak giris yapti.",
+                        player.getName() + " completed login after finishing the security question."
+                );
+            }
+        }
     }
 
     public SecurityQuestion getStoredSecurityQuestion(UUID uuid) {
@@ -2622,7 +2901,7 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     public boolean updateAccountPassword(UUID uuid, String hash) {
-        boolean updated = setAccountString(uuid, "password", hash, "password");
+        boolean updated = setAccountString(uuid, "password.hash", hash, "password");
         if (updated) {
             setPasswordUsable(uuid, true);
         }
@@ -3091,7 +3370,9 @@ public final class Aethelguard extends JavaPlugin {
             meta.getPersistentDataContainer().set(captchaMapKey(), PersistentDataType.BYTE, (byte) 1);
             mapItem.setItemMeta(meta);
         }
-        player.getInventory().addItem(mapItem);
+        player.getInventory().setItem(0, mapItem);
+        player.getInventory().setHeldItemSlot(0);
+        player.updateInventory();
     }
 
     private void removeCaptchaMaps(Player player) {
@@ -3108,7 +3389,16 @@ public final class Aethelguard extends JavaPlugin {
 
         if (changed) {
             player.getInventory().setContents(contents);
+            player.updateInventory();
         }
+    }
+
+    public void lockCaptchaView(Player player) {
+        if (!isCaptchaRequired(player)) return;
+        player.getInventory().setHeldItemSlot(0);
+        Location location = player.getLocation().clone();
+        location.setPitch(90.0F);
+        player.teleport(location);
     }
 
     private boolean isCaptchaMap(ItemStack item) {
@@ -3188,6 +3478,7 @@ public final class Aethelguard extends JavaPlugin {
         unauthenticatedPlayers.remove(player.getUniqueId());
         wrongPasswordAttempts.remove(player.getUniqueId());
         clearAuthEffects(player);
+        clearRegistrationSecurityQuestion(player.getUniqueId());
         restorePreviousLocation(player);
         previousLocations.remove(player.getUniqueId());
         restoreAuthInventory(player);
@@ -3420,18 +3711,30 @@ public final class Aethelguard extends JavaPlugin {
                 Map.of("time", formatDuration(getTemporaryAuthLockoutRemainingMillis(player.getUniqueId())))));
     }
 
-    public void markAuthTimeout(Player player, long timeoutTicks) {
+    public long markAuthTimeout(Player player, long timeoutTicks) {
         long timeoutMillis = Math.max(1L, timeoutTicks) * 50L;
-        authTimeoutDeadlines.put(player.getUniqueId(), System.currentTimeMillis() + timeoutMillis);
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        authTimeoutDeadlines.put(player.getUniqueId(), deadline);
+        return deadline;
     }
 
     public long getAuthTimeoutRemainingSeconds(Player player) {
         Long deadline = authTimeoutDeadlines.get(player.getUniqueId());
         if (deadline == null) {
-            long configuredTicks = getConfig().getLong("auth-settings.timeout.ticks", 1200L);
+            long configuredTicks = getInitialAuthTimeoutTicks(player);
             return Math.max(0L, configuredTicks / 20L);
         }
-        return Math.max(0L, (long) Math.ceil((deadline - System.currentTimeMillis()) / 1000.0));
+        return Math.max(0L, (deadline - System.currentTimeMillis()) / 1000L);
+    }
+
+    public boolean isAuthTimeoutExpired(Player player) {
+        Long deadline = authTimeoutDeadlines.get(player.getUniqueId());
+        return deadline != null && System.currentTimeMillis() >= deadline;
+    }
+
+    public boolean isAuthTimeoutDeadline(Player player, long deadline) {
+        Long current = authTimeoutDeadlines.get(player.getUniqueId());
+        return current != null && current == deadline;
     }
 
     public void clearAuthTimeout(UUID uuid) {
@@ -3440,6 +3743,10 @@ public final class Aethelguard extends JavaPlugin {
 
     public boolean openPinGuiIfNeeded(Player player) {
         return pinGui != null && pinGui.openForCurrentState(player);
+    }
+
+    public boolean isPinGuiOpen(Player player) {
+        return pinGui != null && pinGui.isOpen(player);
     }
 
     public void closePinGui(Player player) {

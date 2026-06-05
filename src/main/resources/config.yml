@@ -171,6 +171,9 @@ recovery:
     # Enables /securityquestion setup/change and question-based /recover.
     # Question texts are loaded from security_questions_<default-language>.yml.
     enabled: true
+    # If true, new players must answer one random security question immediately after registering.
+    # This gives every account a recovery method from day one before the player enters the server.
+    require-after-register: true
   backup-codes:
     # Enables /backupcodes generate and backup-code based /recover.
     enabled: true
@@ -403,6 +406,13 @@ auth-settings:
     issuer: "Aethelguard"
     # Allows small clock drift. 1 means previous/current/next 30-second code is accepted.
     code-window: 1
+    # Once the player reaches the 2FA code step, the auth timeout resets to this value.
+    # 1200 ticks = 60 seconds by default.
+    # Important: 2FA accounts use a fixed, non-configurable 30-second captcha stage before this.
+    # If a player still needs to complete the required registration security question after 2FA,
+    # that question step also gets a fixed, non-configurable 30-second timeout.
+    # So the default 2FA flow can be: 30s captcha + 60s 2FA code + 30s security question.
+    timeout-ticks: 1200
 
   # ───────────────────── [ SESSION SETTINGS ] ────────────────────
   sessions:
@@ -469,6 +479,11 @@ auth-settings:
     setpin-repeat-enabled: true
     # PIN register reminder delay. 200 ticks = 10 seconds.
     setpin-interval-ticks: 200
+    # Registration security-question reminder repeat switch.
+    # false: the security question answer message is sent once after register.
+    security-question-repeat-enabled: true
+    # Registration security-question reminder delay. 200 ticks = 10 seconds.
+    security-question-interval-ticks: 200
     # Two-factor reminder repeat switch.
     # false: the /2fa message is sent once when the player enters two-factor state.
     two-factor-repeat-enabled: true
@@ -489,8 +504,9 @@ auth-settings:
   timeout:
     # Enables auth timeout checks for unauthenticated players.
     enabled: true
-    # Time before timeout triggers. 1200 ticks = 60 seconds.
-    ticks: 1200
+    # Default total auth timeout for normal captcha/login/register/PIN/security-question flows.
+    # 1800 ticks = 90 seconds.
+    ticks: 1800
     # true: restore the player to a safe location, then kick.
     # false: only logs timeout; the player stays online.
     kick: true
@@ -528,6 +544,10 @@ auth-settings:
       - "/2fa"
       - "/authenticator"
       - "/authy"
+      - "/securityquestion"
+      - "/securityq"
+      - "/guvenliksorusu"
+      - "/güvenliksorusu"
       - "/kayıtol"
       - "/recover"
       - "/sifresifirla"
@@ -566,6 +586,14 @@ auth-settings:
       pitch: 1.0
       repeat-times: 2
       repeat-interval-ticks: 6
+    # Played after a successful two-factor login.
+    two-factor-success:
+      enabled: true
+      sound: "entity.player.levelup"
+      volume: 1.0
+      pitch: 1.35
+      repeat-times: 2
+      repeat-interval-ticks: 5
     wrong-password:
       enabled: true
       sound: "entity.item.break"
@@ -622,7 +650,7 @@ auth-settings:
     # Played only when a PIN GUI login/register succeeds.
     pin-gui-success:
       enabled: true
-      sound: "entity.villager.trade"
+      sound: "entity.player.levelup"
       volume: 1.0
       pitch: 1.1
       repeat-times: 1

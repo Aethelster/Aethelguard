@@ -9,11 +9,18 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashSet;
 import java.util.List;
@@ -40,6 +47,10 @@ public class AuthListener implements Listener {
             "/2fa",
             "/authenticator",
             "/authy",
+            "/securityquestion",
+            "/securityq",
+            "/guvenliksorusu",
+            "/güvenliksorusu",
             "/recover",
             "/sifresifirla",
             "/şifresıfırla",
@@ -47,6 +58,7 @@ public class AuthListener implements Listener {
     );
 
     private final Aethelguard plugin;
+    private final java.util.Map<UUID, BukkitTask> promptTasks = new java.util.HashMap<>();
 
     public AuthListener(Aethelguard plugin) {
         this.plugin = plugin;
@@ -88,12 +100,17 @@ public class AuthListener implements Listener {
         startAuthTimeout(player);
     }
 
-    private void startAuthPrompts(Player player) {
+    public void startAuthPrompts(Player player) {
         if (!plugin.getConfig().getBoolean("auth-settings.prompts.enabled", true)) return;
 
         long initialDelay = plugin.getConfig().getLong("auth-settings.prompts.initial-delay-ticks", 20L);
+        UUID uuid = player.getUniqueId();
+        BukkitTask previous = promptTasks.remove(uuid);
+        if (previous != null) {
+            previous.cancel();
+        }
 
-        new BukkitRunnable() {
+        BukkitTask task = new BukkitRunnable() {
             private long nextPromptAt = 0L;
             private String lastState = "";
             private final Set<String> sentOnceStates = new HashSet<>();
@@ -101,12 +118,14 @@ public class AuthListener implements Listener {
             @Override
             public void run() {
                 if (!player.isOnline()) {
+                    promptTasks.remove(player.getUniqueId());
                     this.cancel();
                     return;
                 }
 
                 if (plugin.isAuthenticated(player)) {
                     plugin.hideAuthBossBar(player);
+                    promptTasks.remove(player.getUniqueId());
                     this.cancel();
                     return;
                 }
@@ -117,7 +136,7 @@ public class AuthListener implements Listener {
                 long now = System.currentTimeMillis();
                 if (!state.equals(lastState)) {
                     lastState = state;
-                    nextPromptAt = now;
+                    nextPromptAt = shouldDelayFirstPrompt(state) ? now + ticksToMillis(getPromptIntervalTicks(state)) : now;
                 }
 
                 if (now < nextPromptAt) {
@@ -136,14 +155,25 @@ public class AuthListener implements Listener {
                 nextPromptAt = now + ticksToMillis(interval);
             }
         }.runTaskTimer(plugin, initialDelay, 20L);
+        promptTasks.put(uuid, task);
+    }
+
+    private boolean shouldDelayFirstPrompt(String state) {
+        return state.equals("captcha") || state.equals("security-question") || state.equals("pin-gui");
     }
 
     private String getPromptState(Player player) {
         if (plugin.isCaptchaRequired(player)) {
             return "captcha";
         }
+        if (plugin.isRegistrationSecurityQuestionPending(player)) {
+            return "security-question";
+        }
         if (plugin.isWaitingTwoFactor(player) || plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
             return "two-factor";
+        }
+        if (plugin.isPinGuiOpen(player)) {
+            return "pin-gui";
         }
         if (plugin.isAccountRegistered(player.getUniqueId())) {
             return plugin.getAuthMode(player.getUniqueId()).equals("PIN") ? "pin" : "login";
@@ -157,7 +187,9 @@ public class AuthListener implements Listener {
             case "login" -> plugin.sendMessage(player, "messages.login-prompt", true);
             case "register" -> plugin.sendMessage(player, "messages.register-prompt", true);
             case "pin" -> plugin.sendMessage(player, "messages.pin-prompt", true);
+            case "pin-gui" -> plugin.updateAuthBossBar(player);
             case "setpin" -> plugin.sendMessage(player, "messages.setpin-prompt", true);
+            case "security-question" -> plugin.sendMessage(player, "messages.security-question-register-answer", true);
             case "two-factor" -> {
                 if (plugin.shouldSkipPasswordLoginForTwoFactor(player)) {
                     plugin.startTwoFactorLogin(player);
@@ -182,13 +214,33 @@ public class AuthListener implements Listener {
         return Math.max(1L, ticks) * 50L;
     }
 
-    private void startAuthTimeout(Player player) {
+    public void startAuthTimeout(Player player) {
         if (!plugin.getConfig().getBoolean("auth-settings.timeout.enabled", true)) return;
+        startAuthTimeout(player, plugin.getInitialAuthTimeoutTicks(player));
+    }
 
-        long timeoutTicks = plugin.getConfig().getLong("auth-settings.timeout.ticks", 1200L);
-        plugin.markAuthTimeout(player, timeoutTicks);
+    public void startAuthTimeout(Player player, long timeoutTicks) {
+        if (!plugin.getConfig().getBoolean("auth-settings.timeout.enabled", true)) return;
+        timeoutTicks = Math.max(20L, timeoutTicks);
+        long deadline = plugin.markAuthTimeout(player, timeoutTicks);
+        scheduleAuthTimeoutCheck(player, deadline, timeoutTicks, timeoutTicks);
+    }
+
+    private void scheduleAuthTimeoutCheck(Player player, long deadline, long timeoutTicks, long delayTicks) {
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || plugin.isAuthenticated(player)) return;
+            if (!plugin.isAuthTimeoutDeadline(player, deadline)) return;
+            if (!plugin.isAuthTimeoutExpired(player)) {
+                scheduleAuthTimeoutCheck(player, deadline, timeoutTicks, 1L);
+                return;
+            }
+            if (!plugin.getConfig().getBoolean("auth-settings.timeout.kick", true)) {
+                plugin.logInfo(
+                        player.getName() + " giris zaman asimina ulasti fakat kick ayari kapali.",
+                        player.getName() + " reached authentication timeout, but timeout kick is disabled."
+                );
+                return;
+            }
 
             plugin.logInfo(
                     player.getName() + " giriş yapmadığı için zaman aşımından dolayı sunucudan atıldı.",
@@ -199,9 +251,10 @@ public class AuthListener implements Listener {
                 plugin.restorePreviousLocation(player);
                 plugin.restoreAuthInventory(player);
                 plugin.hideAuthBossBar(player);
-                player.kickPlayer(plugin.getRawStringMessage("messages.timeout-kick", true));
+                player.kickPlayer(plugin.getRawStringMessage("messages.timeout-kick", true,
+                        java.util.Map.of("seconds", String.valueOf(Math.max(1L, (timeoutTicks * 50L + 999L) / 1000L)))));
             }
-        }, timeoutTicks);
+        }, Math.max(1L, delayTicks));
     }
 
     @EventHandler
@@ -212,6 +265,10 @@ public class AuthListener implements Listener {
 
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
+        BukkitTask promptTask = promptTasks.remove(uuid);
+        if (promptTask != null) {
+            promptTask.cancel();
+        }
         boolean authenticated = plugin.isAuthenticated(player);
         if (authenticated) {
             plugin.updateAccountSnapshot(player, false);
@@ -240,6 +297,7 @@ public class AuthListener implements Listener {
         plugin.clearAuthTimeout(uuid);
         plugin.clearCaptchaState(uuid);
         plugin.clearTwoFactorState(uuid);
+        plugin.clearRegistrationSecurityQuestion(uuid);
         plugin.hideAuthBossBar(player);
     }
 
@@ -253,13 +311,79 @@ public class AuthListener implements Listener {
 
         Location from = event.getFrom();
         Location to = event.getTo();
+        if (to != null && plugin.isCaptchaRequired(player)) {
+            to.setPitch(90.0F);
+            player.getInventory().setHeldItemSlot(0);
+        }
 
         if (to != null && (from.getX() != to.getX() || from.getY() != to.getY() || from.getZ() != to.getZ())) {
             Location lockLoc = from.clone();
             lockLoc.setYaw(to.getYaw());
-            lockLoc.setPitch(to.getPitch());
+            lockLoc.setPitch(plugin.isCaptchaRequired(player) ? 90.0F : to.getPitch());
             event.setTo(lockLoc);
         }
+    }
+
+    @EventHandler
+    public void onItemHeld(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        if (plugin.isAuthenticated(player) || !plugin.isCaptchaRequired(player)) return;
+        if (event.getNewSlot() == 0) return;
+
+        event.setCancelled(true);
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (player.isOnline() && plugin.isCaptchaRequired(player)) {
+                player.getInventory().setHeldItemSlot(0);
+            }
+        });
+    }
+
+    @EventHandler
+    public void onSwapHands(PlayerSwapHandItemsEvent event) {
+        if (isUnauthInventoryLocked(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onDropItem(PlayerDropItemEvent event) {
+        if (isUnauthInventoryLocked(event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+        if (isUnauthInventoryLocked(player) && !isPinGuiInventory(event.getInventory())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (isUnauthInventoryLocked(player) && !isPinGuiInventory(event.getView().getTopInventory())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (isUnauthInventoryLocked(player) && !isPinGuiInventory(event.getView().getTopInventory())) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean isUnauthInventoryLocked(Player player) {
+        return !plugin.isAuthenticated(player) && plugin.getUnauthenticatedPlayers().contains(player.getUniqueId());
+    }
+
+    private boolean isPinGuiInventory(org.bukkit.inventory.Inventory inventory) {
+        return inventory != null
+                && inventory.getHolder() != null
+                && inventory.getHolder().getClass().getSimpleName().equals("PinGuiHolder");
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -306,11 +430,18 @@ public class AuthListener implements Listener {
             case "setpin", "pinayarla" -> "setpin";
             case "captcha", "dogrula", "doğrula" -> "captcha";
             case "twofactor", "2fa", "authenticator", "authy" -> "twofactor";
+            case "securityquestion", "securityq", "guvenliksorusu", "güvenliksorusu" -> "securityquestion";
             case "recover", "sifresifirla", "şifresıfırla", "kurtar" -> "recover";
             default -> null;
         };
 
         if (commandName == null) return;
+
+        if (plugin.isRegistrationSecurityQuestionPending(event.getPlayer()) && !commandName.equals("securityquestion")) {
+            event.setCancelled(true);
+            plugin.sendMessage(event.getPlayer(), "messages.security-question-register-answer", true);
+            return;
+        }
 
         if (List.of("login", "register", "pin", "setpin").contains(commandName) && plugin.isCaptchaRequired(event.getPlayer())) {
             event.setCancelled(true);
@@ -345,6 +476,8 @@ public class AuthListener implements Listener {
             new TwoFactorCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else if (commandName.equals("recover")) {
             new RecoverCommand(plugin).onCommand(event.getPlayer(), command, label, args);
+        } else if (commandName.equals("securityquestion")) {
+            new SecurityQuestionCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else if (commandName.equals("pin") || commandName.equals("setpin")) {
             new PinCommand(plugin).onCommand(event.getPlayer(), command, label, args);
         } else {
@@ -353,6 +486,20 @@ public class AuthListener implements Listener {
     }
 
     private boolean isAllowedCommand(String message) {
+        for (String authCommand : List.of(
+                "/login",
+                "/giris",
+                "/giriş",
+                "/register",
+                "/kayitol",
+                "/kayit",
+                "/kayıtol"
+        )) {
+            if (message.equals(authCommand) || message.startsWith(authCommand + " ")) {
+                return true;
+            }
+        }
+
         for (String captchaCommand : List.of("/captcha", "/dogrula", "/doğrula")) {
             if (message.equals(captchaCommand) || message.startsWith(captchaCommand + " ")) {
                 return true;
@@ -367,6 +514,12 @@ public class AuthListener implements Listener {
 
         for (String recoverCommand : List.of("/recover", "/sifresifirla", "/şifresıfırla", "/kurtar")) {
             if (message.equals(recoverCommand) || message.startsWith(recoverCommand + " ")) {
+                return true;
+            }
+        }
+
+        for (String securityQuestionCommand : List.of("/securityquestion", "/securityq", "/guvenliksorusu", "/güvenliksorusu")) {
+            if (message.equals(securityQuestionCommand) || message.startsWith(securityQuestionCommand + " ")) {
                 return true;
             }
         }

@@ -99,18 +99,20 @@ public class AuthCommand implements CommandExecutor {
             }
 
             String hashedPassword = BCrypt.hashpw(args[0], BCrypt.gensalt());
+            if (hashedPassword == null || hashedPassword.isBlank()) {
+                plugin.getServer().getScheduler().runTask(plugin, () ->
+                        sendIfOnline(player, "messages.register-error")
+                );
+                return;
+            }
 
             if (registerPlayer(uuidStr, username, hashedPassword, registrationLocation, ipAddress)) {
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (!player.isOnline()) return;
-                    plugin.getUnauthenticatedPlayers().remove(playerUUID);
-                    plugin.playConfiguredSound(player, "auth-settings.sounds.register-success");
-                    plugin.completeLogin(player, false);
-                    plugin.rememberAuthSession(player);
-                    player.teleport(player.getWorld().getSpawnLocation());
-                    plugin.updateAccountSnapshot(player, true);
-                    logAuthSuccess(player, true);
-                    plugin.sendMessage(player, "messages.register-success", true);
+                    if (plugin.beginRegistrationSecurityQuestion(player)) {
+                        return;
+                    }
+                    completeRegistration(player, playerUUID);
                 });
             } else {
                 plugin.getServer().getScheduler().runTask(plugin, () ->
@@ -141,38 +143,77 @@ public class AuthCommand implements CommandExecutor {
         }
 
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            String storedHash = getStoredPassword(uuidStr);
+            try {
+                String storedHash = getStoredPassword(uuidStr);
 
-            if (storedHash == null) {
-                plugin.getServer().getScheduler().runTask(plugin, () ->
-                        sendIfOnline(player, "messages.not-registered")
-                );
-                return;
-            }
-
-            if (BCrypt.checkpw(args[0], storedHash)) {
-                plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    if (!player.isOnline()) return;
-                    if (plugin.isTwoFactorEnabled(player)) {
-                            plugin.startTwoFactorLogin(player);
-                            return;
-                    }
-                    plugin.getUnauthenticatedPlayers().remove(playerUUID);
-                    plugin.getWrongPasswordAttempts().remove(playerUUID);
-                    plugin.playConfiguredSound(player, "auth-settings.sounds.login-success");
-                    plugin.completeLogin(player, true);
-                    plugin.rememberAuthSession(player);
-                    plugin.updateAccountSnapshot(player, true);
-                    logAuthSuccess(player, false);
-                });
-                return;
-            }
-
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (player.isOnline()) {
-                    handleWrongPassword(player, playerUUID);
+                if (storedHash == null) {
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            sendIfOnline(player, "messages.not-registered")
+                    );
+                    return;
                 }
-            });
+
+                if (storedHash.isBlank()) {
+                    plugin.logWarning(
+                            player.getName() + " icin kayitli sifre hash'i bos.",
+                            "Stored password hash for " + player.getName() + " is empty."
+                    );
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            sendIfOnline(player, "messages.login-error")
+                    );
+                    return;
+                }
+
+                boolean passwordMatches;
+                try {
+                    passwordMatches = BCrypt.checkpw(args[0], storedHash);
+                } catch (IllegalArgumentException e) {
+                    plugin.logWarning(
+                            player.getName() + " için kayıtlı şifre hash'i okunamadı veya geçersiz.",
+                            "Stored password hash for " + player.getName() + " could not be read or is invalid."
+                    );
+                    plugin.getServer().getScheduler().runTask(plugin, () ->
+                            sendIfOnline(player, "messages.login-error")
+                    );
+                    return;
+                }
+
+                if (passwordMatches) {
+                    plugin.getServer().getScheduler().runTask(plugin, () -> {
+                        if (!player.isOnline()) return;
+                        if (plugin.isTwoFactorEnabled(player)) {
+                                plugin.startTwoFactorLogin(player);
+                                return;
+                        }
+                        if (plugin.beginMissingRegistrationSecurityQuestion(player, null)) {
+                            return;
+                        }
+                        plugin.getUnauthenticatedPlayers().remove(playerUUID);
+                        plugin.getWrongPasswordAttempts().remove(playerUUID);
+                        plugin.playConfiguredSound(player, "auth-settings.sounds.login-success");
+                        plugin.completeLogin(player, true);
+                        plugin.rememberAuthSession(player);
+                        plugin.updateAccountSnapshot(player, true);
+                        logAuthSuccess(player, false);
+                    });
+                    return;
+                }
+
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (player.isOnline()) {
+                        handleWrongPassword(player, playerUUID);
+                    }
+                });
+            } catch (Exception e) {
+                plugin.logWarning(
+                        player.getName() + " giriş yaparken beklenmeyen bir hata oluştu.",
+                        "Unexpected error while " + player.getName() + " was logging in."
+                );
+                e.printStackTrace();
+                plugin.getServer().getScheduler().runTask(plugin, () ->
+                        sendIfOnline(player, "messages.login-error")
+                );
+            }
         });
     }
 
@@ -239,6 +280,17 @@ public class AuthCommand implements CommandExecutor {
         }
     }
 
+    private void completeRegistration(Player player, UUID playerUUID) {
+        plugin.getUnauthenticatedPlayers().remove(playerUUID);
+        plugin.playConfiguredSound(player, "auth-settings.sounds.register-success");
+        plugin.completeLogin(player, false);
+        plugin.rememberAuthSession(player);
+        player.teleport(player.getWorld().getSpawnLocation());
+        plugin.updateAccountSnapshot(player, true);
+        logAuthSuccess(player, true);
+        plugin.sendMessage(player, "messages.register-success", true);
+    }
+
     private boolean registerPlayer(String uuid, String username, String hashedPassword, Location location, String ipAddress) {
         String now = currentDate();
 
@@ -250,7 +302,7 @@ public class AuthCommand implements CommandExecutor {
             config.set("uuid", uuid);
             config.set("username", username);
             config.set("auth-mode", "PASSWORD");
-            config.set("password", hashedPassword);
+            config.set("password.hash", hashedPassword);
             config.set("password.usable", true);
             config.set("pin.hash", null);
             config.set("created-at", now);
@@ -406,7 +458,23 @@ public class AuthCommand implements CommandExecutor {
         if (!plugin.getConfig().getBoolean("database.enabled", false)) {
             File userFile = new File(plugin.getLocalUsersFolder(), uuid + ".yml");
             if (!userFile.exists()) return null;
-            return YamlConfiguration.loadConfiguration(userFile).getString("password");
+            FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
+            String hash = config.getString("password.hash");
+            if (hash != null && !hash.isBlank()) {
+                return hash;
+            }
+            if (config.isString("password")) {
+                String legacyHash = config.getString("password");
+                if (legacyHash != null && !legacyHash.isBlank()) {
+                    config.set("password.hash", legacyHash);
+                    try {
+                        config.save(userFile);
+                    } catch (IOException ignored) {
+                    }
+                }
+                return legacyHash;
+            }
+            return null;
         }
 
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {

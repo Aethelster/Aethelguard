@@ -104,7 +104,23 @@ public class PlayerPasswordCommand implements CommandExecutor {
         if (!plugin.getConfig().getBoolean("database.enabled", false)) {
             File userFile = new File(plugin.getLocalUsersFolder(), uuid + ".yml");
             if (!userFile.exists()) return null;
-            return YamlConfiguration.loadConfiguration(userFile).getString("password");
+            FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
+            String hash = config.getString("password.hash");
+            if (hash != null && !hash.isBlank()) {
+                return hash;
+            }
+            if (config.isString("password")) {
+                String legacyHash = config.getString("password");
+                if (legacyHash != null && !legacyHash.isBlank()) {
+                    config.set("password.hash", legacyHash);
+                    try {
+                        config.save(userFile);
+                    } catch (IOException ignored) {
+                    }
+                }
+                return legacyHash;
+            }
+            return null;
         }
 
         try (Connection conn = plugin.getDatabaseManager().getConnection()) {
@@ -127,7 +143,7 @@ public class PlayerPasswordCommand implements CommandExecutor {
             if (!userFile.exists()) return false;
 
             FileConfiguration config = YamlConfiguration.loadConfiguration(userFile);
-            config.set("password", hash);
+            config.set("password.hash", hash);
             config.set("password.usable", true);
             config.set("security.last-password-change", plugin.formatDate(new Date()));
             try {

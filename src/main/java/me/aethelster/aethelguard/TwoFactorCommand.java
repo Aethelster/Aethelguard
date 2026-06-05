@@ -50,7 +50,10 @@ public class TwoFactorCommand implements CommandExecutor {
             }
             String secret = plugin.createPendingTwoFactorSetup(player);
             plugin.sendMessage(player, "messages.two-factor-setup-start", true,
-                    java.util.Map.of("secret", secret));
+                    java.util.Map.of(
+                            "secret", secret,
+                            "qr_url", plugin.createTwoFactorQrUrl(player, secret)
+                    ));
             return true;
         }
 
