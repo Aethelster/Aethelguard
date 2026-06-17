@@ -8,11 +8,11 @@ Oyuncular sunucuya girdiğinde doğrulama tamamlanana kadar kontrollü bir auth 
 
 ## ✅ Güncel Sürüm
 
-**Latest stable:** `v0.4.1-sentinel`
+**Latest stable:** `v0.4.2-sentinel`
 
-`v0.4.1-sentinel`, Aethelguard’ın güncel ücretsiz sürümüdür. `v0.4-sentinel` üstüne 2FA prompt tekrar davranışı ve auth mesaj polish düzeltmeleri eklenmiştir.
+`v0.4.2-sentinel`, Aethelguard’ın güncel ücretsiz sürümüdür. `v0.4.1-sentinel` üstüne monitor-green PIN GUI digit 5 texture düzeltmesi eklenmiştir.
 
-> ⚠️ **Önemli uyarı:** `v0.4.1-sentinel` öncesindeki sürümler artık önerilmez. Eski `dev` buildlerde ve önceki sentinel sürümlerde auth akışı, timeout, local YAML password kaydı, 2FA QR linkleri veya config/messages tarafında düzeltilmiş hatalar bulunabilir. Yeni kurulumlarda ve canlı sunucularda doğrudan **`v0.4.1-sentinel`** kullanmanız tavsiye edilir.
+> ⚠️ **Önemli uyarı:** `v0.4.2-sentinel` öncesindeki sürümler artık önerilmez. Eski `dev` buildlerde ve önceki sentinel sürümlerde auth akışı, timeout, local YAML password kaydı, 2FA QR linkleri, PIN GUI textureları veya config/messages tarafında düzeltilmiş hatalar bulunabilir. Yeni kurulumlarda ve canlı sunucularda doğrudan **`v0.4.2-sentinel`** kullanmanız tavsiye edilir.
 
 ## ✨ Öne Çıkan Özellikler
 
@@ -42,7 +42,7 @@ Oyuncular sunucuya girdiğinde doğrulama tamamlanana kadar kontrollü bir auth 
 
 ## 📦 Kurulum
 
-1. GitHub Releases üzerinden `aethelguard-0.4.1-sentinel.jar` dosyasını indir.
+1. GitHub Releases üzerinden `aethelguard-0.4.2-sentinel.jar` dosyasını indir.
 2. JAR dosyasını sunucunun `plugins` klasörüne at.
 3. Sunucuyu başlat.
 4. `plugins/Aethelguard/config.yml` dosyasını düzenle.
@@ -244,6 +244,7 @@ Yeni ana özellikler:
 - Timeout görevlerinin eski deadline ile yanlış kick/log atması engellendi.
 - Kick ekranlarında MiniMessage taglerinin ham görünmesi düzeltildi.
 - URL içindeki `&` karakterlerinin renk kodu gibi bozulması engellendi.
+- Monitor-green PIN GUI digit 5 kafa texture değerindeki hatalı base64 padding düzeltildi.
 
 ## 🧱 Depolama
 

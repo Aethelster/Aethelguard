@@ -6,7 +6,7 @@
 
     <groupId>me.aethelster</groupId>
     <artifactId>aethelguard</artifactId>
-    <version>0.4.1-sentinel</version>
+    <version>0.4.2-sentinel</version>
     <packaging>jar</packaging>
 
     <name>aethelguard</name>
