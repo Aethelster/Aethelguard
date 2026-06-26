@@ -1,12 +1,12 @@
-name: Aethelguard
+name: AethelGuard
 version: '${version}'
-main: me.aethelster.aethelguard.Aethelguard
+main: me.aethelster.aethelguard.AethelGuard
 api-version: '1.21'
 author: Aethelster
-description: Aethelguard auth system with clean logs and configurable security.
+description: AethelGuard auth system with clean logs and configurable security.
 commands:
   aethelguard:
-    description: Aethelguard admin commands.
+    description: AethelGuard admin commands.
     aliases: [ag, aeg, ayarlar]
     permission: aethelguard.admin
   register:
@@ -31,7 +31,7 @@ commands:
     description: Change your own account password.
     aliases: [sifredegistir, şifredeğiştir, password]
   captcha:
-    description: Solve your Aethelguard captcha challenge.
+    description: Solve your AethelGuard captcha challenge.
     aliases: [dogrula, doğrula]
   twofactor:
     description: Manage or verify two-factor authentication.
@@ -50,7 +50,7 @@ commands:
     aliases: [sifresifirla, şifresıfırla, kurtar]
 permissions:
   aethelguard.admin:
-    description: Allows access to Aethelguard admin commands.
+    description: Allows access to AethelGuard admin commands.
     default: op
   aethelguard.bypass.iplimit:
     description: Bypasses the per-IP registration limit.

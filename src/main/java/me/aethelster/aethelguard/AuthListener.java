@@ -57,10 +57,10 @@ public class AuthListener implements Listener {
             "/kurtar"
     );
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
     private final java.util.Map<UUID, BukkitTask> promptTasks = new java.util.HashMap<>();
 
-    public AuthListener(Aethelguard plugin) {
+    public AuthListener(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

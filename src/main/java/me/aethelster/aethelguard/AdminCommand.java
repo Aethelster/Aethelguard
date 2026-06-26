@@ -33,9 +33,9 @@ import java.util.UUID;
 
 public class AdminCommand implements CommandExecutor, TabCompleter {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public AdminCommand(Aethelguard plugin) {
+    public AdminCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -222,7 +222,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
-            Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[2], status.username());
+            AethelGuard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[2], status.username());
             if (!passwordPolicy.valid()) {
                 plugin.sendMessage(sender, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
                 return true;
@@ -417,7 +417,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
     private List<String> buildDiagnosticsDumpLines() {
         List<String> lines = new ArrayList<>();
-        lines.add("Aethelguard Diagnostics");
+        lines.add("AethelGuard Diagnostics");
         lines.add("Generated at: " + plugin.formatDate(new Date()));
         lines.add("");
         lines.add("[Overview]");
@@ -774,7 +774,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
 
         int registrationLimit = plugin.getConfig().getInt("auth-settings.registration.ip-limit.max-accounts", 2);
         int suspiciousLimit = plugin.getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.reasons.max-accounts-per-ip", 3);
-        List<Aethelguard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
+        List<AethelGuard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
 
         for (String path : List.of(
                 "messages.admin-ipinfo-line",
@@ -802,7 +802,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        List<Aethelguard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
+        List<AethelGuard.AccountIpEntry> accounts = plugin.getAccountsByIp(ip);
         plugin.sendMessage(sender, "messages.admin-accounts-header", true, Map.of(
                 "ip", ip,
                 "count", String.valueOf(accounts.size())
@@ -813,7 +813,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        for (Aethelguard.AccountIpEntry account : accounts) {
+        for (AethelGuard.AccountIpEntry account : accounts) {
             plugin.sendMessage(sender, "messages.admin-accounts-entry", false, Map.of(
                     "player", account.username(),
                     "uuid", account.uuid(),

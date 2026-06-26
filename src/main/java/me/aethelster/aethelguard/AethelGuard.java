@@ -61,7 +61,7 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public final class Aethelguard extends JavaPlugin {
+public final class AethelGuard extends JavaPlugin {
     private static final int AUTH_LOCKOUT_KICK_CYCLES = 2;
     private static final String URL_AMP_SENTINEL = "\u0007URL_AMP\u0007";
     private static final Pattern URL_PATTERN = Pattern.compile("https?://[^\\s<>'\"]+");
@@ -122,7 +122,7 @@ public final class Aethelguard extends JavaPlugin {
     private PinGui pinGui;
     private AuthListener authListener;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
-    private final String consolePrefix = "§b[Aethelguard] §r";
+    private final String consolePrefix = "§b[AethelGuard] §r";
 
 
     public Set<UUID> getLoggedInPlayers() {
@@ -526,6 +526,7 @@ public final class Aethelguard extends JavaPlugin {
     @Override
     public void onEnable() {
         installConsoleLogFilter();
+        migrateLegacyDataFolderName();
 
         boolean isFirstRun = !getDataFolder().exists();
         saveDefaultConfig();
@@ -535,12 +536,12 @@ public final class Aethelguard extends JavaPlugin {
 
         if (isFirstRun) {
             logConfigInfo(
-                    "[!] Aethelguard ilk kez kuruldu! Lutfen config.yml ayarlarini kontrol edip sunucuyu tekrar baslatin.",
-                    "[!] Aethelguard installed for the first time! Please check config.yml and restart."
+                    "[!] AethelGuard ilk kez kuruldu! Lutfen config.yml ayarlarini kontrol edip sunucuyu tekrar baslatin.",
+                    "[!] AethelGuard installed for the first time! Please check config.yml and restart."
             );
         }
 
-        logInfo("Aethelguard çekirdek altyapısı kuruluyor...", "Initializing Aethelguard core infrastructure...");
+        logInfo("AethelGuard çekirdek altyapısı kuruluyor...", "Initializing AethelGuard core infrastructure...");
 
         saveDefaultLangFiles();
         saveDefaultSecurityQuestionFiles();
@@ -582,12 +583,33 @@ public final class Aethelguard extends JavaPlugin {
 
         reauthOnlinePlayersAfterReload();
 
-        logInfo("Aethelguard başarıyla aktif edildi.", "Aethelguard successfully enabled.");
+        logInfo("AethelGuard başarıyla aktif edildi.", "AethelGuard successfully enabled.");
+    }
+
+    private void migrateLegacyDataFolderName() {
+        File dataFolder = getDataFolder();
+        File parentFolder = dataFolder.getParentFile();
+        if (parentFolder == null || dataFolder.exists()) {
+            return;
+        }
+
+        File legacyFolder = new File(parentFolder, "Aethel" + "guard");
+        if (!legacyFolder.exists() || !legacyFolder.isDirectory()) {
+            return;
+        }
+
+        try {
+            Files.move(legacyFolder.toPath(), dataFolder.toPath());
+            getLogger().info("Migrated legacy AethelGuard data folder casing.");
+        } catch (IOException e) {
+            getLogger().warning("Could not migrate legacy AethelGuard data folder casing. Existing files were not overwritten.");
+            e.printStackTrace();
+        }
     }
 
     @Override
     public void onDisable() {
-        logInfo("Aethelguard sistemleri kapatılıyor...", "Safely shutting down Aethelguard systems...");
+        logInfo("AethelGuard sistemleri kapatılıyor...", "Safely shutting down AethelGuard systems...");
         for (UUID uuid : unauthenticatedPlayers) {
             Player player = getServer().getPlayer(uuid);
             if (player != null) {
@@ -613,7 +635,7 @@ public final class Aethelguard extends JavaPlugin {
             refreshOnlineAccountSnapshots();
             reauthOnlinePlayersAfterReload();
 
-            logInfo("Aethelguard ayarları yeniden yüklendi.", "Aethelguard settings reloaded.");
+            logInfo("AethelGuard ayarları yeniden yüklendi.", "AethelGuard settings reloaded.");
             return true;
         } catch (Exception e) {
             logWarning("Ayarlar yeniden yüklenirken hata oluştu.", "An error occurred while reloading settings.");
@@ -809,7 +831,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("console-language", "en"),
                 Map.entry("console-text-mode", "ascii"),
                 Map.entry("default-language", "TR"),
-                Map.entry("prefix", "<yellow>[Aethelguard] </yellow>"),
+                Map.entry("prefix", "<yellow>[AethelGuard] </yellow>"),
                 Map.entry("database.enabled", false),
                 Map.entry("database.host", "localhost"),
                 Map.entry("database.port", 3306),
@@ -914,7 +936,7 @@ public final class Aethelguard extends JavaPlugin {
                 Map.entry("auth-settings.captcha.success-sound.repeat-times", 1),
                 Map.entry("auth-settings.captcha.success-sound.repeat-interval-ticks", 1),
                 Map.entry("auth-settings.two-factor.enabled", true),
-                Map.entry("auth-settings.two-factor.issuer", "Aethelguard"),
+                Map.entry("auth-settings.two-factor.issuer", "AethelGuard"),
                 Map.entry("auth-settings.two-factor.code-window", 1),
                 Map.entry("auth-settings.two-factor.timeout-ticks", 1200),
                 Map.entry("auth-settings.sessions.enabled", true),
@@ -1355,7 +1377,7 @@ public final class Aethelguard extends JavaPlugin {
 
         File[] files = usersFolder.listFiles((dir, name) -> name.endsWith(".yml"));
         List<String> lines = new ArrayList<>();
-        lines.add("# Aethelguard user index");
+        lines.add("# AethelGuard user index");
         lines.add("# username: uuid");
 
         if (files != null) {
@@ -1534,7 +1556,7 @@ public final class Aethelguard extends JavaPlugin {
     public String getFormattedMessageString(String path, boolean prefix) {
         String msg = getLangConfig().getString(path);
         if (msg == null) return "<red>[Missing node: " + path + "]";
-        return prefix ? (getConfig().getString("prefix", "<yellow>[Aethelguard] </yellow>") + msg) : msg;
+        return prefix ? (getConfig().getString("prefix", "<yellow>[AethelGuard] </yellow>") + msg) : msg;
     }
 
     private String applyPlaceholders(String message, Map<String, String> placeholders) {
@@ -2178,7 +2200,7 @@ public final class Aethelguard extends JavaPlugin {
             int timeoutMs = Math.max(500, getConfig().getInt("adaptive-security.suspicious-ip-extra-captcha.vpn-check.timeout-ms", 2500));
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofMillis(timeoutMs))
-                    .header("User-Agent", "Aethelguard/" + getDescription().getVersion())
+                    .header("User-Agent", "AethelGuard/" + getDescription().getVersion())
                     .GET()
                     .build();
             HttpResponse<String> response = vpnHttpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -2521,9 +2543,9 @@ public final class Aethelguard extends JavaPlugin {
     }
 
     public String createTwoFactorQrUrl(Player player, String secret) {
-        String issuer = getConfig().getString("auth-settings.two-factor.issuer", "Aethelguard");
+        String issuer = getConfig().getString("auth-settings.two-factor.issuer", "AethelGuard");
         if (issuer == null || issuer.isBlank()) {
-            issuer = "Aethelguard";
+            issuer = "AethelGuard";
         }
         String label = issuer + ":" + player.getName();
         String otpauth = "otpauth://totp/" + urlEncode(label)

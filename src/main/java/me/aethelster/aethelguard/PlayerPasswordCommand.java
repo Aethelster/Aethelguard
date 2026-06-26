@@ -19,9 +19,9 @@ import java.util.UUID;
 
 public class PlayerPasswordCommand implements CommandExecutor {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public PlayerPasswordCommand(Aethelguard plugin) {
+    public PlayerPasswordCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -54,7 +54,7 @@ public class PlayerPasswordCommand implements CommandExecutor {
             return true;
         }
 
-        Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[1], player.getName());
+        AethelGuard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[1], player.getName());
         if (!passwordPolicy.valid()) {
             plugin.sendMessage(player, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
             return true;

@@ -11,7 +11,7 @@
 # Legacy color codes are supported here, for example &c, &7, &l.
 prefix: "&c[ᴀᴇᴛʜᴇʟɢᴜᴀʀᴅ] &8» &7 "
 # Player message language. The plugin loads:
-# plugins/Aethelguard/messages/messages_<code>.yml
+# plugins/AethelGuard/messages/messages_<code>.yml
 # Examples: "TR" -> messages_tr.yml, "EN" -> messages_en.yml, "DE" -> messages_de.yml.
 # You can add custom languages by creating that file in the messages folder.
 default-language: "TR"
@@ -51,7 +51,7 @@ database:
 status:
   # Enables /aethelguard status and local user metadata/index files.
   enabled: true
-  # If true and database.enabled is false, creates plugins/Aethelguard/users/.
+  # If true and database.enabled is false, creates plugins/AethelGuard/users/.
   create-local-users-folder: true
   # Text index written inside the users folder. It maps usernames to UUID file names.
   user-index-file: "user-index.txt"
@@ -65,7 +65,7 @@ diagnostics:
     # The dump is a support-friendly text report written without passwords,
     # PIN hashes, 2FA secrets, backup codes, or other sensitive secrets.
     enabled: true
-    # Folder under plugins/Aethelguard/ where diagnostic reports are saved.
+    # Folder under plugins/AethelGuard/ where diagnostic reports are saved.
     folder: "diagnostics"
   # true: masks sensitive values such as IP addresses in diagnostic output.
   # Recommended for screenshots, public support tickets, and Discord sharing.
@@ -80,13 +80,13 @@ backups:
     # Creates a timestamped backup before /aethelguard reload changes or syncs files.
     # This protects config.yml, messages files, and security question files from accidental edits.
     enabled: true
-    # Folder under plugins/Aethelguard/ where reload backups are stored.
+    # Folder under plugins/AethelGuard/ where reload backups are stored.
     folder: "backups/reload"
     # Backs up config.yml before the automatic config sync system can add, move, or clean keys.
     include-config: true
-    # Backs up every messages_*.yml file from plugins/Aethelguard/messages/.
+    # Backs up every messages_*.yml file from plugins/AethelGuard/messages/.
     include-messages: true
-    # Backs up every security_questions_*.yml file from plugins/Aethelguard/security_questions/.
+    # Backs up every security_questions_*.yml file from plugins/AethelGuard/security_questions/.
     include-security-questions: true
     # Oldest reload backup folders are deleted when this limit is exceeded.
     max-backups-to-keep: 10
@@ -94,7 +94,7 @@ console-logging:
   # Hides vanilla connection/auth noise such as join/quit, UUID, lost connection,
   # logged in with entity id, and issued server command lines.
   suppress-server-connection-logs: true
-  # Logs only successful Aethelguard login/register events to console.
+  # Logs only successful AethelGuard login/register events to console.
   log-auth-success: true
   # Logs auth state changes such as authenticated quit, unauthenticated quit, and admin unlogin.
   log-auth-state-changes: true
@@ -104,7 +104,7 @@ console-logging:
 # ───────────────────── [ STORAGE SETTINGS ] ─────────────────────
 storage:
   # Used only when database.enabled is false.
-  # User files are stored under plugins/Aethelguard/<local-users-folder>/
+  # User files are stored under plugins/AethelGuard/<local-users-folder>/
   local-users-folder: "users"
   # Date format used for stored account timestamps and status/session displays.
   # Uses Java date patterns. Example: "yyyy-MM-dd HH:mm:ss" -> 2026-06-04 17:30:00.
@@ -225,7 +225,7 @@ auth-settings:
   temporary-lockout:
     # Enables temporary auth lockout after repeated full failed auth cycles.
     # The first max-attempt kick stays normal. If the same player reaches max attempts
-    # and gets kicked again, Aethelguard locks that account temporarily.
+    # and gets kicked again, AethelGuard locks that account temporarily.
     # The required kick cycle count is intentionally hardcoded to 2.
     # Lock duration after the second failed auth kick cycle.
     enabled: true
@@ -403,7 +403,7 @@ auth-settings:
     # Authy and similar apps all use the same TOTP standard.
     enabled: true
     # Name shown inside authenticator apps when players add their secret.
-    issuer: "Aethelguard"
+    issuer: "AethelGuard"
     # Allows small clock drift. 1 means previous/current/next 30-second code is accepted.
     code-window: 1
     # Once the player reaches the 2FA code step, the auth timeout resets to this value.

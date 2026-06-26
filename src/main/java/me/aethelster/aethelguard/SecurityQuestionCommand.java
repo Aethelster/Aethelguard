@@ -8,9 +8,9 @@ import org.bukkit.entity.Player;
 import java.util.Map;
 
 public class SecurityQuestionCommand implements CommandExecutor {
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public SecurityQuestionCommand(Aethelguard plugin) {
+    public SecurityQuestionCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -37,7 +37,7 @@ public class SecurityQuestionCommand implements CommandExecutor {
                 plugin.sendMessage(player, "messages.security-question-register-answer", true);
                 return true;
             }
-            Aethelguard.SecurityQuestion question = plugin.getStoredSecurityQuestion(player.getUniqueId());
+            AethelGuard.SecurityQuestion question = plugin.getStoredSecurityQuestion(player.getUniqueId());
             plugin.sendMessage(player, question == null
                     ? "messages.security-question-status-missing"
                     : "messages.security-question-status-set", true);
@@ -60,7 +60,7 @@ public class SecurityQuestionCommand implements CommandExecutor {
                 return true;
             }
 
-            Aethelguard.SecurityQuestion question = plugin.createPendingSecurityQuestion(player);
+            AethelGuard.SecurityQuestion question = plugin.createPendingSecurityQuestion(player);
             plugin.sendMessage(player, "messages.security-question-setup-start", true,
                     Map.of("question", question.text()));
             return true;

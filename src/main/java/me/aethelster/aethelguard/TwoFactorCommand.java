@@ -7,9 +7,9 @@ import org.bukkit.entity.Player;
 
 public class TwoFactorCommand implements CommandExecutor {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public TwoFactorCommand(Aethelguard plugin) {
+    public TwoFactorCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

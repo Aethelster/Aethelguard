@@ -56,14 +56,14 @@ public class PinGui implements Listener {
     private static final int EXIT_SLOT = 25;
     private static final Pattern TEXTURE_URL_PATTERN = Pattern.compile("https?://textures\\.minecraft\\.net/texture/[A-Za-z0-9]+");
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
     private final PinCommand pinCommand;
     private final Map<UUID, Session> sessions = new HashMap<>();
     private final Map<UUID, BukkitTask> updateTasks = new HashMap<>();
     private final Map<UUID, Integer> closeAttempts = new HashMap<>();
     private final Set<UUID> intentionalClose = new java.util.HashSet<>();
 
-    public PinGui(Aethelguard plugin, PinCommand pinCommand) {
+    public PinGui(AethelGuard plugin, PinCommand pinCommand) {
         this.plugin = plugin;
         this.pinCommand = pinCommand;
     }
@@ -436,7 +436,7 @@ public class PinGui implements Listener {
 
         String pin = session.input();
         if (session.mode() != Mode.LOGIN) {
-            Aethelguard.PinPolicyResult policy = plugin.validatePinPolicy(pin);
+            AethelGuard.PinPolicyResult policy = plugin.validatePinPolicy(pin);
             if (!policy.valid()) {
                 plugin.sendMessage(player, policy.messagePath(), true, policy.placeholders());
                 plugin.playConfiguredSound(player, "auth-settings.sounds.pin-gui-disabled-confirm");
@@ -561,7 +561,7 @@ public class PinGui implements Listener {
 
     private record Theme(Map<Integer, String> digits, Map<Integer, String> statusDigits, String secret, String confirm,
                          String backspace, String clear, String exit, String attemptLabel, String colon) {
-        private static Theme resolve(Aethelguard plugin, String override) {
+        private static Theme resolve(AethelGuard plugin, String override) {
             String name = override == null || override.isBlank()
                     ? plugin.getConfig().getString("auth-settings.pin.gui.theme", "quartz")
                     : override;

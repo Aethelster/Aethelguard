@@ -9,9 +9,9 @@ import org.bukkit.event.Listener;
 
 public class ChatListener implements Listener {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public ChatListener(Aethelguard plugin) {
+    public ChatListener(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

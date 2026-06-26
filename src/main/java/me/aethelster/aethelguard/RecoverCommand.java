@@ -10,9 +10,9 @@ import java.util.Arrays;
 import java.util.Map;
 
 public class RecoverCommand implements CommandExecutor {
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public RecoverCommand(Aethelguard plugin) {
+    public RecoverCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -54,7 +54,7 @@ public class RecoverCommand implements CommandExecutor {
         String newPassword = args[args.length - 1];
         String proof = String.join(" ", Arrays.copyOfRange(args, 1, args.length - 1));
 
-        Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(newPassword, player.getName());
+        AethelGuard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(newPassword, player.getName());
         if (!passwordPolicy.valid()) {
             plugin.sendMessage(player, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
             return true;
@@ -105,7 +105,7 @@ public class RecoverCommand implements CommandExecutor {
     }
 
     private void sendUsage(Player player) {
-        Aethelguard.SecurityQuestion question = plugin.getStoredSecurityQuestion(player.getUniqueId());
+        AethelGuard.SecurityQuestion question = plugin.getStoredSecurityQuestion(player.getUniqueId());
         if (question != null) {
             plugin.sendMessage(player, "messages.recover-question-hint", true,
                     Map.of("question", question.text()));

@@ -9,9 +9,9 @@ import java.util.List;
 import java.util.Map;
 
 public class BackupCodesCommand implements CommandExecutor {
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public BackupCodesCommand(Aethelguard plugin) {
+    public BackupCodesCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

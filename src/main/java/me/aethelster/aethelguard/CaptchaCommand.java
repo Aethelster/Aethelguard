@@ -7,9 +7,9 @@ import org.bukkit.entity.Player;
 
 public class CaptchaCommand implements CommandExecutor {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public CaptchaCommand(Aethelguard plugin) {
+    public CaptchaCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

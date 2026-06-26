@@ -20,9 +20,9 @@ import java.util.UUID;
 
 public class PinCommand implements CommandExecutor {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public PinCommand(Aethelguard plugin) {
+    public PinCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -133,7 +133,7 @@ public class PinCommand implements CommandExecutor {
             return true;
         }
 
-        Aethelguard.PinPolicyResult policy = plugin.validatePinPolicy(args[0]);
+        AethelGuard.PinPolicyResult policy = plugin.validatePinPolicy(args[0]);
         if (!policy.valid()) {
             plugin.sendMessage(player, policy.messagePath(), true, policy.placeholders());
             return true;
@@ -204,7 +204,7 @@ public class PinCommand implements CommandExecutor {
             return true;
         }
 
-        Aethelguard.PinPolicyResult policy = plugin.validatePinPolicy(args[1]);
+        AethelGuard.PinPolicyResult policy = plugin.validatePinPolicy(args[1]);
         if (!policy.valid()) {
             plugin.sendMessage(player, policy.messagePath(), true, policy.placeholders());
             return true;

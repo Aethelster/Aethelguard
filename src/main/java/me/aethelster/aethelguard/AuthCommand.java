@@ -21,9 +21,9 @@ import java.util.UUID;
 
 public class AuthCommand implements CommandExecutor {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public AuthCommand(Aethelguard plugin) {
+    public AuthCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
@@ -71,7 +71,7 @@ public class AuthCommand implements CommandExecutor {
             return;
         }
 
-        Aethelguard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[0], player.getName());
+        AethelGuard.PasswordPolicyResult passwordPolicy = plugin.validatePasswordPolicy(args[0], player.getName());
         if (!passwordPolicy.valid()) {
             plugin.sendMessage(player, passwordPolicy.messagePath(), true, passwordPolicy.placeholders());
             return;

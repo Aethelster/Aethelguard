@@ -9,10 +9,10 @@ import java.sql.Statement;
 
 public class DatabaseManager {
 
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
     private HikariDataSource dataSource;
 
-    public DatabaseManager(Aethelguard plugin) {
+    public DatabaseManager(AethelGuard plugin) {
         this.plugin = plugin;
     }
 

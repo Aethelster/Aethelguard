@@ -8,9 +8,9 @@ import org.bukkit.entity.Player;
 import java.util.Map;
 
 public class RecoveryMethodCommand implements CommandExecutor {
-    private final Aethelguard plugin;
+    private final AethelGuard plugin;
 
-    public RecoveryMethodCommand(Aethelguard plugin) {
+    public RecoveryMethodCommand(AethelGuard plugin) {
         this.plugin = plugin;
     }
 
