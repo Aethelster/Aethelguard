@@ -64,12 +64,20 @@
                             <target>
                                 <mkdir dir="${project.basedir}/jars/main-jars" />
                                 <mkdir dir="${project.basedir}/jars/original-jars" />
+                                <mkdir dir="${project.basedir}/jars/changelogs" />
+                                <available file="${project.basedir}/changelogs/${project.build.finalName}.md"
+                                           property="build.changelog.exists" />
+                                <fail unless="build.changelog.exists"
+                                      message="Missing build changelog: changelogs/${project.build.finalName}.md" />
                                 <copy todir="${project.basedir}/jars/main-jars" overwrite="true">
                                     <fileset dir="${project.build.directory}" includes="${project.build.finalName}.jar" />
                                 </copy>
                                 <copy todir="${project.basedir}/jars/original-jars" overwrite="true">
                                     <fileset dir="${project.build.directory}" includes="original-*.jar" />
                                 </copy>
+                                <copy file="${project.basedir}/changelogs/${project.build.finalName}.md"
+                                      tofile="${project.basedir}/jars/changelogs/${project.build.finalName}-changelog.md"
+                                      overwrite="true" />
                             </target>
                         </configuration>
                     </execution>
